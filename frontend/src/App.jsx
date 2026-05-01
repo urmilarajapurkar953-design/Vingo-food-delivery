@@ -4,10 +4,12 @@ import { Toaster } from 'react-hot-toast'
 import SignUp from './pages/signUp'
 import SignIn from './pages/signIn'
 import ForgotPassword from './pages/forgotPassword'
+import useGetCurrentUser from './hooks/useGetCurrentUser'
 
 export const serverUrl = 'http://localhost:8000'
 
 function App() {
+  useGetCurrentUser() 
   return (
     <>
       <Toaster 

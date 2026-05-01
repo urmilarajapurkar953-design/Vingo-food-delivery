@@ -6,14 +6,22 @@ const isAuth = async (req, res, next) => {
         if (!token) {
             return res.status(401).json({ message: "token not found" });
         }
+        
         const decodeToken = await jwt.verify(token, process.env.JWT_SECRET);
+        
         if (!decodeToken) {
             return res.status(401).json({ message: "Invalid token" });
         }
-       console.log("Decoded Token:", decodeToken); // Debugging line
-        req.userId = decodeToken.userId;
+
+        // Fix: Use .id because that is what is in your Decoded Token log
+        // Fix: Attach to req.user so the controller knows where to find it
+        req.user = decodeToken; 
+        
         next();
     } catch (error) {
-        res.status(500).json({ message: "Internal server error" });
+        console.log("Auth Error:", error.message);
+        res.status(401).json({ message: "Unauthorized or session expired" });
     }
 }
+
+export default isAuth;

@@ -1,4 +1,5 @@
 import express from "express";
+import userRouter from './routes/user.routes.js';
 import dotenv from "dotenv";
 dotenv.config();
 import connectDB from "./config/db.js";
@@ -17,6 +18,8 @@ app.use(cors({
 app.use(express.json());
 app.use(cookieParser());
 app.use("/api/auth", authRouter);
+app.use("/api/user", userRouter);
+
 
 
 app.listen(process.env.PORT || 5000, () => {
