@@ -5,6 +5,8 @@ import axios from 'axios';
 import toast from 'react-hot-toast';
 import { GoogleAuthProvider, signInWithPopup } from 'firebase/auth';
 import { auth } from '../../firebase';
+import { useDispatch } from 'react-redux';
+import { setUserData } from '../redux/user.slice';
 
 function SignIn() {
   const serverUrl = "http://localhost:8000";
@@ -13,6 +15,7 @@ function SignIn() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
+  const dispatch = useDispatch();
 
   const handleSignIn = async () => {
     if (!email || !password) return toast.error("Please fill all fields");
@@ -21,7 +24,8 @@ function SignIn() {
     const loadingToast = toast.loading("Signing in...");
 
     try {
-      await axios.post(`${serverUrl}/api/auth/signin`, { email, password }, { withCredentials: true });
+      const result = await axios.post(`${serverUrl}/api/auth/signin`, { email, password }, { withCredentials: true });
+      dispatch(setUserData(result.data));
       toast.success("Signed in!", { id: loadingToast });
       navigate("/");
     } catch (error) {
@@ -38,6 +42,7 @@ function SignIn() {
       const provider = new GoogleAuthProvider();
       const result = await signInWithPopup(auth, provider);
       await axios.post(`${serverUrl}/api/auth/google-auth`, { email: result.user.email }, { withCredentials: true });
+      dispatch(setUserData(result.data));
       toast.success("Welcome back!", { id: loadingToast });
       navigate("/");
     } catch (error) {

@@ -4,42 +4,39 @@ import { Toaster } from 'react-hot-toast'
 import SignUp from './pages/signUp'
 import SignIn from './pages/signIn'
 import ForgotPassword from './pages/forgotPassword'
+import Home from './pages/Home'
+import Nav from './components/Nav'
 import useGetCurrentUser from './hooks/useGetCurrentUser'
+import { useSelector } from 'react-redux'
+import useGetCity from './hooks/useGetCity'
 
 export const serverUrl = 'http://localhost:8000'
 
 function App() {
-  useGetCurrentUser() 
+  useGetCurrentUser(); 
+  useGetCity();
+  const { userData } = useSelector(state => state.User);
+
   return (
     <>
-      <Toaster 
-        position="top-center" 
-        reverseOrder={false} 
-        toastOptions={{
-          duration: 3000,
-          style: {
-            borderRadius: '8px',
-            background: '#333',
-            color: '#fff',
-          },
-        }}
-      />
-      
-      <Routes>
-        {/* Fix: Define the root path */}
-        <Route path="/" element={<Navigate to="/signin" />} />
-        
-        <Route path="/signup" element={<SignUp />} />
-        <Route path="/signin" element={<SignIn />} />
-        {/* Keeping your alias just in case */}
-        <Route path="/sign-in" element={<SignIn />} /> 
-        <Route path="/forgot-password" element={<ForgotPassword />} />
+      <Toaster />
+      {/* Render Nav only if user is logged in */}
+      {userData && <Nav />} 
 
-        {/* Optional: Catch-all route for 404 errors */}
-        <Route path="*" element={<div className="flex items-center justify-center h-screen">404 - Page Not Found</div>} />
+      <Routes>
+        <Route path="/" element={<Navigate to="/home" />} />
+        
+        {/* If no userData, show Auth pages; otherwise go Home */}
+        <Route path="/signup" element={!userData ? <SignUp /> : <Navigate to="/home" />} />
+        <Route path="/signin" element={!userData ? <SignIn /> : <Navigate to="/home" />} />
+        
+        {/* If userData exists, show Home; otherwise go to Signin */}
+        <Route path="/home" element={userData ? <Home /> : <Navigate to="/signin" />} />
+
+        <Route path="*" element={<div>404 - Not Found</div>} />
       </Routes>
     </>
-  )
+  );
 }
 
 export default App

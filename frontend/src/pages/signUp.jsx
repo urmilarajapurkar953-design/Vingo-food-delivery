@@ -5,6 +5,8 @@ import axios from 'axios';
 import toast from 'react-hot-toast';
 import { GoogleAuthProvider, signInWithPopup } from 'firebase/auth';
 import { auth } from '../../firebase';
+import { useDispatch } from 'react-redux';
+import { setUserData } from '../redux/user.slice';
 
 function SignUp() {
   const serverUrl = "http://localhost:8000";
@@ -19,6 +21,7 @@ function SignUp() {
   const [mobile, setMobile] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false); // New Loading State
+  const dispatch = useDispatch();
 
   const handleSignUp = async () => {
     if (!fullName || !email || !mobile || !password) {
@@ -33,6 +36,7 @@ function SignUp() {
         fullName, email, mobile, password, role
       }, { withCredentials: true });
 
+      dispatch(setUserData(result.data));
       toast.success("Account created!", { id: loadingToast });
       navigate("/signin");
     } catch (error) {
@@ -62,6 +66,8 @@ function SignUp() {
         mobile: mobile,
         role: "user"
       }, { withCredentials: true });
+
+      dispatch(setUserData(result.data));
 
       toast.success("Welcome!", { id: loadingToast });
       navigate("/signin");
