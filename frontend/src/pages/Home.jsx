@@ -9,6 +9,7 @@ function Home() {
 
   // 1. If still loading or fetch failed
   if (!userData) {
+    
     return (
       <div className="flex h-screen items-center justify-center">
         <p className="text-xl animate-pulse">Loading User Dashboard...</p>
