@@ -5,7 +5,7 @@ import OwnerDashboard from '../components/OwnerDashboard'
 import DeliveryBoy from '../components/DeliveryBoy'
 
 function Home() {
-  const { userData } = useSelector((state) => state.User);
+  const { userData } = useSelector((state) => state.user);
 
   // 1. If still loading or fetch failed
   if (!userData) {

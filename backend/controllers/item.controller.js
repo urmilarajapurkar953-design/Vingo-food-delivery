@@ -1,5 +1,6 @@
-import cloudinary from "../config/cloudinary.config.js";
-import Shop from "../models/Shop.model.js";
+import cloudinary from "../utils/cloudinary.js";
+import Item from "../models/Item.model.js";
+import Shop from "../models/shop.model.js";
 
 export const addItem = async (req, res) => {
     try {
@@ -7,6 +8,7 @@ export const addItem = async (req, res) => {
         let image;
         if (req.file) {
             image = await cloudinary.uploader.upload(req.file.path);
+            image = image.secure_url;
         }
         const shop = await Shop.findOne({ owner: req.user._id });
         if (!shop) {
@@ -33,6 +35,7 @@ export const editItem = async (req, res) => {
         let image;
         if (req.file) {
             image = await cloudinary.uploader.upload(req.file.path);
+            image = image.secure_url;
         }
         const item = await Item.findByIdAndUpdate(
             itemId,

@@ -9,19 +9,28 @@ import Nav from './components/Nav'
 import useGetCurrentUser from './hooks/useGetCurrentUser'
 import { useSelector } from 'react-redux'
 import useGetCity from './hooks/useGetCity'
+import useGetMyShop from './hooks/useGetMyShop'
+import CreateEditShop from './pages/CreateEditShop'
+import { useLocation } from 'react-router-dom';
 
 export const serverUrl = 'http://localhost:8000'
 
 function App() {
+  const location = useLocation();
+  const hideNavPaths = ['/create-edit-shop'];
   useGetCurrentUser(); 
   useGetCity();
-  const { userData } = useSelector(state => state.User);
-
+  useGetMyShop();
+const { userData } = useSelector((state) => state.user || {});
   return (
     <>
       <Toaster />
-      {/* Render Nav only if user is logged in */}
-      {userData && <Nav />} 
+      
+      {/* 
+          1. userData: User must be logged in
+          2. !hideNavPaths.includes(...): Current page must NOT be /create-edit-shop
+      */}
+      {userData && !hideNavPaths.includes(location.pathname) && <Nav />} 
 
       <Routes>
         <Route path="/" element={<Navigate to="/home" />} />
@@ -32,11 +41,11 @@ function App() {
         
         {/* If userData exists, show Home; otherwise go to Signin */}
         <Route path="/home" element={userData ? <Home /> : <Navigate to="/signin" />} />
+        <Route path="/create-edit-shop" element={userData ? <CreateEditShop /> : <Navigate to="/signin" />} />
 
         <Route path="*" element={<div>404 - Not Found</div>} />
       </Routes>
     </>
   );
 }
-
 export default App

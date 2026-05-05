@@ -1,6 +1,5 @@
-import Shop from "../models/shop.model";
-import cloudinary from "../utils/cloudinary.js";
-
+import Shop from "../models/shop.model.js";
+import uploadOnCloudinary from "../utils/cloudinary.js";
 export const createEditShop = async (req, res) => {
     try {
         const { name, city, state, address } = req.body;
@@ -10,6 +9,7 @@ export const createEditShop = async (req, res) => {
         // Handle Image Upload
         let imageUrl;
         if (req.file) {
+            console.log("Received file:", req.file);
             const uploadResponse = await cloudinary.uploader.upload(req.file.path);
             imageUrl = uploadResponse.secure_url; // Extract the actual URL
         } else {
@@ -43,7 +43,7 @@ export const createEditShop = async (req, res) => {
         } // Closed correctly here
 
         // Populate and Send Response
-        await shop.populate("owner");
+        await shop.populate("owner items");
         
         // Return 200 for update, 201 for creation (optional distinction)
         return res.status(200).json({ 

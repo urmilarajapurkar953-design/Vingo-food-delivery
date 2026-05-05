@@ -1,5 +1,4 @@
 import express from "express";
-// You must include EVERY function you plan to use in the routes below
 import { 
   signUp, 
   signIn, 
@@ -9,6 +8,7 @@ import {
   resetPassword,
   googleAuth
 } from "../controllers/auth.controller.js";
+
 
 const authRouter = express.Router();
 

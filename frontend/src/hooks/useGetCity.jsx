@@ -1,17 +1,18 @@
 import axios from 'axios'
 import { useEffect } from 'react'
 import { useDispatch, useSelector } from 'react-redux'
-import { setCity } from '../redux/user.slice' 
-
+import { setCurrentCity, setCurrentState, setCurrentAddress } from '../redux/user.slice'
 function useGetCity() {
   const dispatch = useDispatch()
+
+
   // Pull city from state to check if we already have it
-  const { userData, city } = useSelector(state => state.User)
+  const { userData, currentCity, currentState, currentAddress } = useSelector(state => state.user)
 
   useEffect(() => {
     // 1. If city already exists and isn't a placeholder, don't ask again.
     // This stops the browser from auto-blocking you for "spamming" requests.
-    if (city && city !== "Unknown Location" && city !== "Location Denied") {
+    if (currentCity && currentCity !== "Unknown Location" && currentCity !== "Location Denied") {
       return;
     }
 
@@ -36,9 +37,13 @@ function useGetCity() {
         )
 
         const cityName = result?.data?.results?.[0]?.city || result?.data?.results?.[0]?.village || "Unknown Location";
-        
+        const stateName = result?.data?.results?.[0]?.state || "Unknown State";
+        const address = result?.data?.results?.[0]?.formatted || "Unknown Address";
         console.log("Detected City:", cityName);
-        dispatch(setCity(cityName));
+        console.log("Detected State:", stateName);
+        dispatch(setCurrentCity(cityName));
+        dispatch(setCurrentState(stateName));
+        dispatch(setCurrentAddress(address));
 
       } catch (error) {
         console.error("Error fetching city name:", error);
@@ -48,12 +53,12 @@ function useGetCity() {
       
       // 2. Set a fallback state so the UI knows permission was denied
       if (error.code === 1) { // PERMISSION_DENIED
-        dispatch(setCity("Location Denied"));
+        dispatch(setCurrentCity("Location Denied"));
       }
     }, geoOptions);
     
     // 3. Add 'city' to dependencies so the effect re-evaluates correctly
-  }, [userData, dispatch, city]); 
+  }, [userData, dispatch, currentCity, currentState, currentAddress]); 
 }
 
 export default useGetCity
