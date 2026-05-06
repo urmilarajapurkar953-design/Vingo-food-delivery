@@ -1,21 +1,34 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react'; // Added useEffect
 import { useNavigate } from 'react-router-dom';
 import { FcGoogle } from "react-icons/fc";
 import axios from 'axios';
 import toast from 'react-hot-toast';
 import { GoogleAuthProvider, signInWithPopup } from 'firebase/auth';
 import { auth } from '../../firebase';
-import { useDispatch } from 'react-redux';
+import { useDispatch, useSelector } from 'react-redux'; // Added useSelector
 import { setUserData } from '../redux/user.slice';
 
 function SignIn() {
-  const serverUrl = "http://localhost:8000";
-  const primaryColor = "#ff4d2d";
   const navigate = useNavigate();
+  const dispatch = useDispatch();
+  
+  // Define primaryColor since it was used but not defined
+  const primaryColor = "#ff4d2d";
+  
+  // Get userData to watch for successful login
+  const { userData } = useSelector((state) => state.user || {});
+  
+  const [loading, setLoading] = useState(false);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [loading, setLoading] = useState(false);
-  const dispatch = useDispatch();
+
+  // Redirect automatically when userData is populated in Redux
+  useEffect(() => {
+    if (userData) {
+      console.log("User detected, navigating home...");
+      navigate("/home");
+    }
+  }, [userData, navigate]);
 
   const handleSignIn = async () => {
     if (!email || !password) return toast.error("Please fill all fields");
@@ -24,10 +37,9 @@ function SignIn() {
     const loadingToast = toast.loading("Signing in...");
 
     try {
-      const result = await axios.post(`${serverUrl}/api/auth/signin`, { email, password }, { withCredentials: true });
+      const result = await axios.post(`http://localhost:8000/api/auth/signin`, { email, password }, { withCredentials: true });
       dispatch(setUserData(result.data));
       toast.success("Signed in!", { id: loadingToast });
-      navigate("/");
     } catch (error) {
       toast.error(error.response?.data?.message || "Sign-in failed", { id: loadingToast });
     } finally {
@@ -40,13 +52,20 @@ function SignIn() {
     const loadingToast = toast.loading("Connecting to Google...");
     try {
       const provider = new GoogleAuthProvider();
-      const result = await signInWithPopup(auth, provider);
-      await axios.post(`${serverUrl}/api/auth/google-auth`, { email: result.user.email }, { withCredentials: true });
-      dispatch(setUserData(result.data));
+      const firebaseResult = await signInWithPopup(auth, provider);
+      
+      const dbResponse = await axios.post(
+        `http://localhost:8000/api/auth/google-auth`, 
+        { email: firebaseResult.user.email }, 
+        { withCredentials: true }
+      );
+
+      dispatch(setUserData(dbResponse.data)); 
       toast.success("Welcome back!", { id: loadingToast });
-      navigate("/");
+      
     } catch (error) {
-      toast.error(error.response?.data?.message || "Google login failed", { id: loadingToast });
+      console.error("Auth Error:", error);
+      toast.error("Google login failed", { id: loadingToast });
     } finally {
       setLoading(false);
     }
@@ -94,4 +113,4 @@ function SignIn() {
   );
 }
 
-export default SignIn;
+export default SignIn; // <--- MUST HAVE THIS LINE

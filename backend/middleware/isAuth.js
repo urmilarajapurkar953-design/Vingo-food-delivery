@@ -4,7 +4,7 @@ const isAuth = async (req, res, next) => {
     try {
         const token = req.cookies.token;
         if (!token) {
-            return res.status(401).json({ message: "token not found" });
+            return res.status(401).json({ message: "Token not found" });
         }
         
         const decodeToken = await jwt.verify(token, process.env.JWT_SECRET);
@@ -13,9 +13,12 @@ const isAuth = async (req, res, next) => {
             return res.status(401).json({ message: "Invalid token" });
         }
 
-        // Fix: Use .id because that is what is in your Decoded Token log
-        // Fix: Attach to req.user so the controller knows where to find it
-        req.user = decodeToken; 
+        // Standardize the ID: 
+        // We map whatever ID property exists to _id to satisfy Mongoose requirements
+        req.user = {
+            ...decodeToken,
+            _id: decodeToken.id || decodeToken._id 
+        };
         
         next();
     } catch (error) {
