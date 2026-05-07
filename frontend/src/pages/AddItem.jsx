@@ -3,6 +3,8 @@ import { FaUtensils } from 'react-icons/fa';
 import { useDispatch } from 'react-redux';
 import axios from 'axios';
 import { setMyShopData } from '../redux/ownerSlice';
+// Fixed the missing serverUrl import
+import { serverUrl } from '../main';
 
 const AddItem = () => {
     const dispatch = useDispatch();
@@ -49,6 +51,7 @@ const AddItem = () => {
             alert("Item Added Successfully!");
         } catch (error) {
             console.log(error);
+            alert("Error: " + error.response?.data?.message || "Something went wrong");
         }
     };
 
@@ -77,7 +80,7 @@ const AddItem = () => {
                         />
                     </div>
 
-                    {/* Food Image Input and Preview */}
+                    {/* Food Image Input and BIG PREVIEW */}
                     <div>
                         <label className='block text-xs font-semibold text-gray-600 mb-1 uppercase tracking-tight'>Food Image</label>
                         <input 
@@ -87,9 +90,9 @@ const AddItem = () => {
                             onChange={handleImage}
                         />
                         
-                        {/* Big Image Preview - Only shows if image is selected */}
+                        {/* This is the part that makes the photo look big like your shop photo */}
                         {frontendImage && (
-                            <div className='mt-3 w-full h-44 overflow-hidden rounded-lg border border-gray-200'>
+                            <div className='mt-3 w-full h-44 overflow-hidden rounded-lg border border-gray-200 shadow-sm'>
                                 <img 
                                     src={frontendImage} 
                                     alt="Preview" 

@@ -1,7 +1,7 @@
 import express from "express";
 import isAuth from "../middleware/isAuth.js";
-import { addItem, editItem } from "../controllers/item.controller.js";
 import upload from "../middleware/multer.js";
+import { addItem, editItem } from "../controllers/shop.controller.js";
 
 const itemRouter = express.Router();
 
