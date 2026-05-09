@@ -1,15 +1,22 @@
-import React, { useState } from 'react';
-import { FaUtensils } from 'react-icons/fa';
+import React, { useState, useEffect } from 'react';
+import { FaUtensils, FaSpinner } from 'react-icons/fa';
 import { useDispatch } from 'react-redux';
 import axios from 'axios';
 import { setMyShopData } from '../redux/ownerSlice';
-// Fixed the missing serverUrl import
 import { serverUrl } from '../main';
+import { useParams, useNavigate } from 'react-router-dom';
+import toast from 'react-hot-toast'; // Import toast
 
-const AddItem = () => {
+const EditItem = () => {
     const dispatch = useDispatch();
-    
-    const [name, setName] = useState('');
+    const navigate = useNavigate();
+    const { itemId } = useParams();
+
+    const [currentItem, setCurrentItem] = useState(null);
+    const [isLoading, setIsLoading] = useState(true);
+    const [isSubmitting, setIsSubmitting] = useState(false);
+
+    const [name, setName] = useState("");
     const [price, setPrice] = useState(0);
     const [category, setCategory] = useState('');
     const [foodType, setFoodType] = useState('veg');
@@ -30,8 +37,45 @@ const AddItem = () => {
         }
     };
 
+    // 1. Fetch current item data on load
+    useEffect(() => {
+        const handleGetItemById = async () => {
+            try {
+                setIsLoading(true);
+                const result = await axios.get(`${serverUrl}/api/item/get-by-id/${itemId}`, { withCredentials: true });
+                setCurrentItem(result.data);
+            } catch (error) {
+                console.log("Error fetching item by ID:", error);
+                toast.error("Failed to load item details"); // Toast for error
+            } finally {
+                setIsLoading(false);
+            }
+        }
+        handleGetItemById();
+    }, [itemId]);
+
+    // 2. Sync state when currentItem is loaded
+    useEffect(() => {
+        if (currentItem) {
+            setName(currentItem.name || '');
+            setPrice(currentItem.price || 0);
+            setCategory(currentItem.category || '');
+            setFoodType(currentItem.foodType || 'veg');
+            setFrontendImage(currentItem.image || '');
+        }
+    }, [currentItem]);
+
     const handleSubmit = async (e) => {
         e.preventDefault();
+        
+        // Basic validation toast
+        if (!category) {
+            return toast.error("Please select a category");
+        }
+
+        setIsSubmitting(true);
+        const loadingToast = toast.loading("Updating item..."); // Show loading toast
+        
         try {
             const formData = new FormData();
             formData.append("name", name);
@@ -43,39 +87,47 @@ const AddItem = () => {
                 formData.append("image", backendImage);
             }
 
-            const result = await axios.post(`${serverUrl}/api/item/add-item`, formData, {
+            const result = await axios.put(`${serverUrl}/api/item/edit-item/${itemId}`, formData, {
                 withCredentials: true
             });
 
-            console.log("--- SUCCESSFUL RESPONSE FROM SERVER ---");
-console.log(result.data);
-
             dispatch(setMyShopData(result.data));
-            alert("Item Added Successfully!");
+            
+            toast.success("Item Updated Successfully!", { id: loadingToast }); // Update loading toast to success
+            navigate('/home'); 
         } catch (error) {
             console.log(error);
-            alert("Error: " + error.response?.data?.message || "Something went wrong");
+            const message = error.response?.data?.message || "Something went wrong";
+            toast.error(message, { id: loadingToast }); // Update loading toast to error
+        } finally {
+            setIsSubmitting(false);
         }
     };
+
+    if (isLoading) {
+        return (
+            <div className="min-h-screen flex flex-col justify-center items-center bg-[#fff9f6]">
+                <FaSpinner className="animate-spin text-[#ff4d2d] text-4xl mb-4" />
+                <p className="text-gray-600 font-medium">Fetching item details...</p>
+            </div>
+        );
+    }
 
     return (
         <div className='min-h-screen bg-[#fff9f6] flex justify-center items-center p-4 py-10'>
             <div className='w-full max-w-md bg-white shadow-lg rounded-2xl p-8 border border-gray-100'>
-                {/* Header Icon and Title */}
                 <div className='flex flex-col items-center text-center mb-6'>
                     <div className='bg-orange-50 p-4 rounded-full mb-2'>
                         <FaUtensils className='text-[#ff4d2d] w-8 h-8' />
                     </div>
-                    <h2 className='text-2xl font-bold text-gray-800'>Add Food</h2>
+                    <h2 className='text-2xl font-bold text-gray-800'>Edit Food Item</h2>
                 </div>
 
                 <form onSubmit={handleSubmit} className='space-y-4'>
-                    {/* Name */}
                     <div>
                         <label className='block text-xs font-semibold text-gray-600 mb-1 uppercase tracking-tight'>Name</label>
                         <input 
                             type="text" 
-                            placeholder='Enter Item Name' 
                             className='w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-1 focus:ring-orange-500 bg-white'
                             onChange={(e) => setName(e.target.value)}
                             value={name}
@@ -83,7 +135,6 @@ console.log(result.data);
                         />
                     </div>
 
-                    {/* Food Image Input and BIG PREVIEW */}
                     <div>
                         <label className='block text-xs font-semibold text-gray-600 mb-1 uppercase tracking-tight'>Food Image</label>
                         <input 
@@ -92,25 +143,17 @@ console.log(result.data);
                             className='w-full px-2 py-1 border rounded-lg text-sm text-gray-500 file:mr-4 file:py-1 file:px-4 file:rounded file:border-0 file:text-xs file:font-semibold file:bg-orange-50 file:text-orange-700'
                             onChange={handleImage}
                         />
-                        
-                        {/* This is the part that makes the photo look big like your shop photo */}
                         {frontendImage && (
-                            <div className='mt-3 w-full h-44 overflow-hidden rounded-lg border border-gray-200 shadow-sm'>
-                                <img 
-                                    src={frontendImage} 
-                                    alt="Preview" 
-                                    className="w-full h-full object-cover" 
-                                />
+                            <div className='mt-3 w-full h-44 overflow-hidden rounded-lg border border-gray-100 shadow-sm'>
+                                <img src={frontendImage} alt="Preview" className="w-full h-full object-cover" />
                             </div>
                         )}
                     </div>
 
-                    {/* Price */}
                     <div>
                         <label className='block text-xs font-semibold text-gray-600 mb-1 uppercase tracking-tight'>Price</label>
                         <input 
                             type="number" 
-                            placeholder='0' 
                             className='w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-1 focus:ring-orange-500'
                             onChange={(e) => setPrice(e.target.value)}
                             value={price}
@@ -118,41 +161,47 @@ console.log(result.data);
                         />
                     </div>
 
-                    {/* Category Selection */}
                     <div>
-                        <label className='block text-xs font-semibold text-gray-600 mb-1 uppercase tracking-tight'>Select Category</label>
+                        <label className='block text-xs font-semibold text-gray-600 mb-1 uppercase tracking-tight'>Category</label>
                         <select 
                             className='w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-1 focus:ring-orange-500 bg-white text-sm'
                             onChange={(e) => setCategory(e.target.value)}
                             value={category}
                             required
                         >
-                            <option value="">select Category</option>
+                            <option value="">Select Category</option>
                             {categories.map((cate, index) => (
                                 <option value={cate} key={index}>{cate}</option>
                             ))}
                         </select>
                     </div>
 
-                    {/* Food Type Selection */}
                     <div>
-                        <label className='block text-xs font-semibold text-gray-600 mb-1 uppercase tracking-tight'>Select Food Type</label>
+                        <label className='block text-xs font-semibold text-gray-600 mb-1 uppercase tracking-tight'>Food Type</label>
                         <select 
                             className='w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-1 focus:ring-orange-500 bg-white text-sm'
                             onChange={(e) => setFoodType(e.target.value)}
                             value={foodType}
                         >
-                            <option value="veg">veg</option>
-                            <option value="non veg">non veg</option>
+                            <option value="veg">Veg</option>
+                            <option value="non veg">Non Veg</option>
                         </select>
                     </div>
 
-                    {/* Save Button */}
                     <button 
                         type="submit"
-                        className='w-full bg-[#ff4d2d] text-white py-3 rounded-lg font-bold shadow-md hover:bg-orange-600 transition-all duration-200 mt-2'
+                        disabled={isSubmitting}
+                        className={`w-full text-white py-3 rounded-lg font-bold shadow-md transition-all mt-2 flex justify-center items-center gap-2 ${
+                            isSubmitting ? 'bg-orange-400 cursor-not-allowed' : 'bg-[#ff4d2d] hover:bg-orange-600'
+                        }`}
                     >
-                        Save
+                        {isSubmitting ? (
+                            <>
+                                <FaSpinner className="animate-spin" /> Saving Changes...
+                            </>
+                        ) : (
+                            'Update Item'
+                        )}
                     </button>
                 </form>
             </div>
@@ -160,4 +209,4 @@ console.log(result.data);
     );
 };
 
-export default AddItem;
+export default EditItem;

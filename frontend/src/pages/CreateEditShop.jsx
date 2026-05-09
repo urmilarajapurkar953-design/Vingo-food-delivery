@@ -1,11 +1,11 @@
 import React, { useState, useEffect } from 'react';
 import { IoIosArrowRoundBack } from "react-icons/io";
-import { FaUtensils } from "react-icons/fa";
+import { FaUtensils, FaSpinner } from "react-icons/fa"; 
 import { useNavigate } from 'react-router-dom';
 import { useSelector, useDispatch } from 'react-redux';
 import { setMyShopData } from '../redux/ownerSlice';
 import axios from 'axios';
-import { toast } from 'react-hot-toast'; // Changed import
+import { toast } from 'react-hot-toast';
 
 const serverUrl = "http://localhost:8000";
 
@@ -61,6 +61,7 @@ function CreateEditShop() {
     const handleSubmit = async (e) => {
         e.preventDefault();
         setLoading(true);
+        const toastId = toast.loading(myShopData ? "Updating shop..." : "Creating shop...");
 
         const data = new FormData();
         data.append("name", formData.name);
@@ -78,18 +79,31 @@ function CreateEditShop() {
                 headers: { "Content-Type": "multipart/form-data" }
             });
 
-            dispatch(setMyShopData(result.data.shop));
+            // Extract updated shop from response
+            const updatedShopBase = result.data.shop || result.data;
+
+            // --- THE FIX ---
+            // We check if the server returned full item objects. 
+            // If it returned empty or just IDs, we merge our existing Redux items back in.
+            const finalData = {
+                ...updatedShopBase,
+                items: (updatedShopBase.items && updatedShopBase.items.length > 0 && typeof updatedShopBase.items[0] === 'object') 
+                    ? updatedShopBase.items 
+                    : (myShopData?.items || [])
+            };
+
+            dispatch(setMyShopData(finalData));
             
-            // Using react-hot-toast syntax
-            toast.success(myShopData ? "Shop updated successfully!" : "Shop created successfully!");
+            toast.success(myShopData ? "Shop updated successfully!" : "Shop created successfully!", { id: toastId });
 
             setTimeout(() => {
                 navigate('/home'); 
-            }, 1500);
+            }, 1000);
 
         } catch (error) {
             console.error("Form Submission Error:", error.response?.data || error.message);
-            toast.error(error.response?.data?.message || "Failed to save shop");
+            const errorMsg = error.response?.data?.message || "Failed to save shop";
+            toast.error(errorMsg, { id: toastId });
             setLoading(false); 
         }
     };
@@ -135,8 +149,19 @@ function CreateEditShop() {
 
                     <textarea name="address" value={formData.address} onChange={handleInputChange} placeholder="Address" rows="2" className={`${inputStyle} resize-none`} required />
 
-                    <button type="submit" disabled={loading} className={`w-full ${loading ? 'bg-gray-400' : 'bg-[#ff4d2d] hover:bg-[#e64429]'} text-white font-bold py-3 rounded-xl shadow-lg transition-all duration-300 mt-2`}>
-                        {loading ? "Saving..." : (myShopData ? "Update Shop Details" : "Save Shop Details")}
+                    <button 
+                        type="submit" 
+                        disabled={loading} 
+                        className={`w-full flex items-center justify-center gap-2 ${loading ? 'bg-orange-300' : 'bg-[#ff4d2d] hover:bg-[#e64429]'} text-white font-bold py-3 rounded-xl shadow-lg transition-all duration-300 mt-2`}
+                    >
+                        {loading ? (
+                            <>
+                                <FaSpinner className="animate-spin" />
+                                Processing...
+                            </>
+                        ) : (
+                            myShopData ? "Update Shop Details" : "Save Shop Details"
+                        )}
                     </button>
                 </form>
             </div>

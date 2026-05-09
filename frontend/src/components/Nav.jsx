@@ -95,7 +95,10 @@ function Nav() {
           <div className='flex items-center gap-5 md:gap-8'>
             {myShopData && (
               <>
-                <button className='flex items-center gap-2 text-gray-700 hover:text-[#ff4d2d] transition-all font-semibold text-sm group'>
+                <button 
+                  onClick={() => navigate('/add-item')}
+                  className='flex items-center gap-2 text-gray-700 hover:text-[#ff4d2d] transition-all font-semibold text-sm group'
+                >
                   <FaPlus size={18} className='group-hover:scale-110 transition-transform' />
                   <span className='hidden sm:inline'>Add Item</span>
                 </button>

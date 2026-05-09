@@ -74,7 +74,7 @@ export const addItem = async (req, res) => {
             }
         }
 
-        const shop = await Shop.findOne({ owner: req.user._id });
+        const shop = await Shop.findOne({ owner: req.user._id }).populate("items");
         if (!shop) {
             return res.status(400).json({ message: "Shop not found for the user" });
         }
@@ -87,6 +87,16 @@ export const addItem = async (req, res) => {
             image: imageUrl,
             shop: shop._id,
         });
+
+        shop.items.push(item._id);
+        await shop.save();
+        await shop.populate("items owner");
+        return res.status(201).json(shop);
+
+        console.log("--- DATA RECEIVED BY BACKEND ---");
+        console.log("Body:", req.body); // Shows name, price, category
+        console.log("File:", req.file); // Shows if image was received by Multer
+        console.log("User ID:", req.user?._id); // Shows if isAuth is working
 
         // FIX: Return the variable 'item', NOT the Model 'Shop'
         res.status(201).json(item);
@@ -110,14 +120,32 @@ export const editItem = async (req, res) => {
 
         const item = await Item.findByIdAndUpdate(
             itemId,
-            { name, category, foodType, price, image: imageUrl },
+            { name, category, foodType, price: Number(price), image: imageUrl },
             { new: true }
         );
 
         if (!item) {
             return res.status(404).json({ message: "Item not found" });
         }
-        res.status(200).json({ message: "Item updated successfully", item });
+
+        // Fetch the updated shop and populate it
+        const shop = await Shop.findOne({ owner: req.user._id }).populate("items owner");
+
+        // Return the shop object directly so Redux stays clean
+        res.status(200).json(shop); 
+    } catch (error) {
+        res.status(500).json({ message: error.message });
+    }
+}
+
+export const getItemById = async (req, res) => {
+    try {
+        const { itemId } = req.params;
+        const item = await Item.findById(itemId);
+        if (!item) {
+            return res.status(404).json({ message: "Item not found" });
+        }
+        res.status(200).json(item);
     } catch (error) {
         res.status(500).json({ message: error.message });
     }
