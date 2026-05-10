@@ -1,13 +1,15 @@
 import React, { useState } from 'react';
-import { FaUtensils } from 'react-icons/fa';
+import { FaUtensils, FaSpinner } from 'react-icons/fa'; // Added FaSpinner
 import { useDispatch } from 'react-redux';
 import axios from 'axios';
 import { setMyShopData } from '../redux/ownerSlice';
-// Fixed the missing serverUrl import
 import { serverUrl } from '../main';
+import { toast } from 'react-hot-toast'; // Recommended for better feedback
+import { useNavigate } from 'react-router-dom';
 
 const AddItem = () => {
     const dispatch = useDispatch();
+    const navigate = useNavigate();
     
     const [name, setName] = useState('');
     const [price, setPrice] = useState(0);
@@ -15,6 +17,9 @@ const AddItem = () => {
     const [foodType, setFoodType] = useState('veg');
     const [backendImage, setBackendImage] = useState(null);
     const [frontendImage, setFrontendImage] = useState(null);
+    
+    // --- NEW LOADING STATE ---
+    const [loading, setLoading] = useState(false);
 
     const categories = [
         "Snacks", "Main Course", "Desserts", "Pizza", "Burgers", 
@@ -32,6 +37,11 @@ const AddItem = () => {
 
     const handleSubmit = async (e) => {
         e.preventDefault();
+        
+        // Start Loading
+        setLoading(true);
+        const toastId = toast.loading("Adding item to menu...");
+
         try {
             const formData = new FormData();
             formData.append("name", name);
@@ -47,14 +57,23 @@ const AddItem = () => {
                 withCredentials: true
             });
 
-            console.log("--- SUCCESSFUL RESPONSE FROM SERVER ---");
-console.log(result.data);
+            // Update Redux
+            dispatch(setMyShopData(result.data.shop || result.data));
+            
+            toast.success("Item Added Successfully!", { id: toastId });
+            
+            // Redirect back to home/dashboard after success
+            setTimeout(() => {
+                navigate('/home');
+            }, 1500);
 
-            dispatch(setMyShopData(result.data));
-            alert("Item Added Successfully!");
         } catch (error) {
-            console.log(error);
-            alert("Error: " + error.response?.data?.message || "Something went wrong");
+            console.error(error);
+            const errorMsg = error.response?.data?.message || "Something went wrong";
+            toast.error("Error: " + errorMsg, { id: toastId });
+        } finally {
+            // Stop Loading
+            setLoading(false);
         }
     };
 
@@ -75,25 +94,26 @@ console.log(result.data);
                         <label className='block text-xs font-semibold text-gray-600 mb-1 uppercase tracking-tight'>Name</label>
                         <input 
                             type="text" 
+                            disabled={loading}
                             placeholder='Enter Item Name' 
-                            className='w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-1 focus:ring-orange-500 bg-white'
+                            className='w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-1 focus:ring-orange-500 bg-white disabled:bg-gray-50'
                             onChange={(e) => setName(e.target.value)}
                             value={name}
                             required
                         />
                     </div>
 
-                    {/* Food Image Input and BIG PREVIEW */}
+                    {/* Food Image */}
                     <div>
                         <label className='block text-xs font-semibold text-gray-600 mb-1 uppercase tracking-tight'>Food Image</label>
                         <input 
                             type="file" 
+                            disabled={loading}
                             accept="image/*"
-                            className='w-full px-2 py-1 border rounded-lg text-sm text-gray-500 file:mr-4 file:py-1 file:px-4 file:rounded file:border-0 file:text-xs file:font-semibold file:bg-orange-50 file:text-orange-700'
+                            className='w-full px-2 py-1 border rounded-lg text-sm text-gray-500 file:mr-4 file:py-1 file:px-4 file:rounded file:border-0 file:text-xs file:font-semibold file:bg-orange-50 file:text-orange-700 disabled:opacity-50'
                             onChange={handleImage}
                         />
                         
-                        {/* This is the part that makes the photo look big like your shop photo */}
                         {frontendImage && (
                             <div className='mt-3 w-full h-44 overflow-hidden rounded-lg border border-gray-200 shadow-sm'>
                                 <img 
@@ -110,8 +130,9 @@ console.log(result.data);
                         <label className='block text-xs font-semibold text-gray-600 mb-1 uppercase tracking-tight'>Price</label>
                         <input 
                             type="number" 
+                            disabled={loading}
                             placeholder='0' 
-                            className='w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-1 focus:ring-orange-500'
+                            className='w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-1 focus:ring-orange-500 disabled:bg-gray-50'
                             onChange={(e) => setPrice(e.target.value)}
                             value={price}
                             required
@@ -122,7 +143,8 @@ console.log(result.data);
                     <div>
                         <label className='block text-xs font-semibold text-gray-600 mb-1 uppercase tracking-tight'>Select Category</label>
                         <select 
-                            className='w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-1 focus:ring-orange-500 bg-white text-sm'
+                            disabled={loading}
+                            className='w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-1 focus:ring-orange-500 bg-white text-sm disabled:bg-gray-50'
                             onChange={(e) => setCategory(e.target.value)}
                             value={category}
                             required
@@ -138,7 +160,8 @@ console.log(result.data);
                     <div>
                         <label className='block text-xs font-semibold text-gray-600 mb-1 uppercase tracking-tight'>Select Food Type</label>
                         <select 
-                            className='w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-1 focus:ring-orange-500 bg-white text-sm'
+                            disabled={loading}
+                            className='w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-1 focus:ring-orange-500 bg-white text-sm disabled:bg-gray-50'
                             onChange={(e) => setFoodType(e.target.value)}
                             value={foodType}
                         >
@@ -147,12 +170,20 @@ console.log(result.data);
                         </select>
                     </div>
 
-                    {/* Save Button */}
+                    {/* Save Button with Loading State */}
                     <button 
                         type="submit"
-                        className='w-full bg-[#ff4d2d] text-white py-3 rounded-lg font-bold shadow-md hover:bg-orange-600 transition-all duration-200 mt-2'
+                        disabled={loading}
+                        className={`w-full flex items-center justify-center gap-2 ${loading ? 'bg-orange-300' : 'bg-[#ff4d2d] hover:bg-orange-600'} text-white py-3 rounded-lg font-bold shadow-md transition-all duration-200 mt-2`}
                     >
-                        Save
+                        {loading ? (
+                            <>
+                                <FaSpinner className="animate-spin" />
+                                Adding Item...
+                            </>
+                        ) : (
+                            "Save"
+                        )}
                     </button>
                 </form>
             </div>

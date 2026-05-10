@@ -1,8 +1,7 @@
 import axios from 'axios'
 import { useEffect } from 'react'
-import { serverUrl } from '../App'
+import { serverUrl } from '../main' // Ensure this matches your server URL location
 import { useDispatch } from 'react-redux'
-import { setUserData } from '../redux/user.slice'
 import { setMyShopData } from '../redux/ownerSlice';
 
 function useGetMyShop() {
@@ -15,22 +14,23 @@ function useGetMyShop() {
           withCredentials: true,
         })
 
-        // Check if your backend sends { user: {...} } or just {...}
-        // If the console.log shows an object WITH a user property, use result.data.user
         console.log("API Response:", result.data)
         
-        const userData = result.data.user || result.data
-        dispatch(setMyShopData(userData))
+        // 1. Safely handle the data using Optional Chaining (?.)
+        // 2. If result.data is null/undefined, default to an empty object {}
+        const shopData = result.data?.shop || result.data || {};
+        
+        dispatch(setMyShopData(shopData))
 
       } catch (error) {
-        // If unauthorized (401), ensure userData is null so app doesn't hang
-        console.error("Error fetching current user:", error)
-        dispatch(setMyShopData(null))
+        console.error("Error fetching shop data:", error)
+        // Set to empty object or null depending on how your UI handles "no shop"
+        dispatch(setMyShopData({})) 
       }
     }
 
     fetchShop()
-  }, [dispatch]) // Added dispatch to dependency array for best practice
+  }, [dispatch]) 
 }
 
 export default useGetMyShop
