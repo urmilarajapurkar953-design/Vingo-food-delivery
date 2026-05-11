@@ -1,36 +1,31 @@
-import axios from 'axios'
-import { useEffect } from 'react'
-import { serverUrl } from '../main' // Ensure this matches your server URL location
-import { useDispatch } from 'react-redux'
+import { useEffect } from 'react';
+import axios from 'axios';
+import { useDispatch } from 'react-redux';
 import { setMyShopData } from '../redux/ownerSlice';
+import { serverUrl } from '../App';
 
-function useGetMyShop() {
-  const dispatch = useDispatch()
+const useGetMyShop = () => {
+    const dispatch = useDispatch();
 
-  useEffect(() => {
-    const fetchShop = async () => {
-      try {
-        const result = await axios.get(`${serverUrl}/api/shop/get-my`, {
-          withCredentials: true,
-        })
+    useEffect(() => {
+        const fetchMyShop = async () => {
+            try {
+                // Update this line to include /v1/shops
+                const response = await axios.get(`${serverUrl}/api/v1/shops/get-my`, {
+                    withCredentials: true
+                });
+                
+                if (response.data) {
+                    dispatch(setMyShopData(response.data));
+                }
+            } catch (error) {
+                // This is where your console error was coming from
+                console.error("Error fetching shop data:", error);
+            }
+        };
 
-        console.log("API Response:", result.data)
-        
-        // 1. Safely handle the data using Optional Chaining (?.)
-        // 2. If result.data is null/undefined, default to an empty object {}
-        const shopData = result.data?.shop || result.data || {};
-        
-        dispatch(setMyShopData(shopData))
+        fetchMyShop();
+    }, [dispatch]);
+};
 
-      } catch (error) {
-        console.error("Error fetching shop data:", error)
-        // Set to empty object or null depending on how your UI handles "no shop"
-        dispatch(setMyShopData({})) 
-      }
-    }
-
-    fetchShop()
-  }, [dispatch]) 
-}
-
-export default useGetMyShop
+export default useGetMyShop;

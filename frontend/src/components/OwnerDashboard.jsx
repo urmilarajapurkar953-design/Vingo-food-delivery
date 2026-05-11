@@ -5,19 +5,21 @@ import { useNavigate } from 'react-router-dom';
 import { FaUtensils, FaPen, FaPlus } from "react-icons/fa"; 
 import OwnerItemCard from './OwnerItemCard';
 
-
 function OwnerDashboard() {
   const { myShopData } = useSelector((state) => state.owner);
   const navigate = useNavigate();
 
- 
+  // STRICT CHECK: Only consider a shop exists if it has an ID and a Name
+  const shopExists = myShopData && myShopData._id && myShopData.name;
+
   return (
     <div className='w-full min-h-screen bg-[#fff9f6] flex flex-col items-center pb-10'>
       <Nav />
       
       <div className="h-[20px]"></div>
 
-      {!myShopData && (
+      {/* CASE 1: NO SHOP EXISTS - SHOW CREATE BUTTON */}
+      {!shopExists ? (
         <div className='flex justify-center items-center p-4 sm:p-6 w-full mt-10'>
           <div className='w-full max-w-md bg-white shadow-lg rounded-2xl p-8 border border-gray-100 hover:shadow-xl transition-shadow duration-300'>
             <div className='flex flex-col items-center text-center'>
@@ -35,10 +37,9 @@ function OwnerDashboard() {
             </div>
           </div>
         </div>
-      )}
-
-      {myShopData && (
-        <div className='w-full flex flex-col items-center gap-6 px-4 sm:px-6'>
+      ) : (
+        /* CASE 2: SHOP EXISTS - SHOW SHOP DETAILS & MENU */
+        <div className='w-full flex flex-col items-center gap-6 px-4 sm:px-6 animate-in fade-in duration-500'>
           <h1 className='text-2xl sm:text-3xl text-gray-900 flex items-center gap-3 mt-2 text-center font-bold'>
             <FaUtensils className='text-[#ff4d2d] w-10 h-10' />
             Welcome to {myShopData.name}
@@ -70,6 +71,7 @@ function OwnerDashboard() {
             </div>
           </div>
 
+          {/* MENU SECTION */}
           <div className='w-full max-w-3xl mt-4'>
             <div className='flex justify-between items-center mb-6'>
                 <h3 className="text-xl font-bold text-gray-800">Your Menu</h3>
@@ -83,7 +85,6 @@ function OwnerDashboard() {
                 )}
             </div>
 
-            {/* SAFE CHECK: IF ITEMS IS UNDEFINED OR EMPTY */}
             {(!myShopData.items || myShopData.items.length === 0) ? (
               <div className='w-full bg-white shadow-lg rounded-2xl p-8 border border-gray-100 text-center'>
                 <FaUtensils className='text-[#ff4d2d] w-12 h-12 mb-4 mx-auto' />
@@ -99,7 +100,6 @@ function OwnerDashboard() {
             ) : (
               <div className='flex flex-col gap-4'>
                 {myShopData.items.map((item, index) => (
-                  /* FIX: ADDING UNIQUE KEY PROP */
                   <OwnerItemCard key={item._id || index} data={item} />
                 ))}
               </div>

@@ -3,6 +3,18 @@ import uploadOnCloudinary from "../utils/cloudinary.js";
 import Item from "../models/Item.model.js";
 import fs from "fs";
 
+// 1. GET ALL SHOPS (Crucial for UserDashboard)
+export const getAllShops = async (req, res) => {
+    try {
+        // Fetches every shop in the database for the general feed
+        const shops = await Shop.find().populate("owner items");
+        return res.status(200).json(shops);
+    } catch (error) {
+        res.status(500).json({ message: error.message });
+    }
+};
+
+// 2. CREATE OR EDIT SHOP (Owner Only)
 export const createEditShop = async (req, res) => {
     try {
         const { name, city, state, address } = req.body;
@@ -20,7 +32,7 @@ export const createEditShop = async (req, res) => {
             if (uploadResponse && uploadResponse.secure_url) {
                 imageUrl = uploadResponse.secure_url;
             } else {
-                return res.status(500).json({ message: "Failed to get URL from Cloudinary" });
+                return res.status(500).json({ message: "Failed to upload image" });
             }
         }
 
@@ -51,37 +63,32 @@ export const createEditShop = async (req, res) => {
     }
 };
 
+// 3. GET LOGGED-IN USER'S SHOP
 export const getMyShop = async (req, res) => {
     try {
-        // Ensure req.user exists before querying
         if (!req.user?._id) {
             return res.status(401).json({ message: "Unauthorized" });
         }
 
         const shop = await Shop.findOne({ owner: req.user._id }).populate("owner items");
-        
-        // Return an empty object if no shop is found instead of null
         return res.status(200).json(shop || {}); 
     } catch (error) {
         res.status(500).json({ message: error.message });
     }
 };
 
+// 4. ADD ITEM TO SHOP
 export const addItem = async (req, res) => {
     try {
         const { name, category, foodType, price } = req.body;
         let imageUrl = "";
 
         if (req.file) {
-            // FIX: Use the helper function 'uploadOnCloudinary' 
-            // instead of 'cloudinary.uploader.upload'
             const result = await uploadOnCloudinary(req.file.path);
-            if (result) {
-                imageUrl = result.secure_url;
-            }
+            if (result) imageUrl = result.secure_url;
         }
 
-        const shop = await Shop.findOne({ owner: req.user._id }).populate("items");
+        const shop = await Shop.findOne({ owner: req.user._id });
         if (!shop) {
             return res.status(400).json({ message: "Shop not found for the user" });
         }
@@ -97,32 +104,21 @@ export const addItem = async (req, res) => {
 
         shop.items.push(item._id);
         await shop.save();
-        // Using the populate method on an existing document instance
-await shop.populate([
-    {
-        path: 'items',
-        options: { sort: { createdAt: -1 } } // Newest items at the top
-    },
-    {
-        path: 'owner'
-    }
-]);
+
+        await shop.populate([
+            { path: 'items', options: { sort: { createdAt: -1 } } },
+            { path: 'owner' }
+        ]);
+
         return res.status(201).json(shop);
-
-        console.log("--- DATA RECEIVED BY BACKEND ---");
-        console.log("Body:", req.body); // Shows name, price, category
-        console.log("File:", req.file); // Shows if image was received by Multer
-        console.log("User ID:", req.user?._id); // Shows if isAuth is working
-
-        // FIX: Return the variable 'item', NOT the Model 'Shop'
-        res.status(201).json(item);
 
     } catch (error) {
         console.error("Add Item Error:", error);
         res.status(500).json({ message: error.message });
     }
-}
+};
 
+// 5. EDIT EXISTING ITEM
 export const editItem = async (req, res) => {
     try {
         const { itemId } = req.params;
@@ -140,70 +136,50 @@ export const editItem = async (req, res) => {
             { new: true }
         );
 
-        if (!item) {
-            return res.status(404).json({ message: "Item not found" });
-        }
+        if (!item) return res.status(404).json({ message: "Item not found" });
 
-        // Fetch the updated shop and populate it
-const shop = await Shop.findOne({ owner: req.user._id })
-    .populate({
-        path: 'items',
-        options: { sort: { createdAt: -1 } } // Sorts by newest first
-    })
-    .populate("owner");
-        // Return the shop object directly so Redux stays clean
+        const shop = await Shop.findOne({ owner: req.user._id })
+            .populate({ path: 'items', options: { sort: { createdAt: -1 } } })
+            .populate("owner");
+
         res.status(200).json(shop); 
     } catch (error) {
         res.status(500).json({ message: error.message });
     }
-}
+};
 
-export const getItemById = async (req, res) => {
-    try {
-        const { itemId } = req.params;
-        const item = await Item.findById(itemId);
-        if (!item) {
-            return res.status(404).json({ message: "Item not found" });
-        }
-        res.status(200).json(item);
-    } catch (error) {
-        res.status(500).json({ message: error.message });
-    }
-}
-
+// 6. DELETE ITEM
 export const deleteItem = async (req, res) => {
     try {
         const { itemId } = req.params;
         
-        // 1. Delete the actual item document
         const item = await Item.findByIdAndDelete(itemId);
-        if (!item) {
-            return res.status(404).json({ message: "Item not found" });
-        }
+        if (!item) return res.status(404).json({ message: "Item not found" });
 
-        // 2. Find the shop and remove the item ID from its array
         const shop = await Shop.findOne({ owner: req.user._id });
         if (shop) {
             shop.items = shop.items.filter(id => id.toString() !== itemId);
             await shop.save();
-
-            // 3. Populate everything so the frontend stays fully hydrated
             await shop.populate([
-                {
-                    path: "items",
-                    options: { sort: { createdAt: -1 } } 
-                },
-                {
-                    path: "owner"
-                }
+                { path: "items", options: { sort: { createdAt: -1 } } },
+                { path: "owner" }
             ]);
         }
 
-        // 4. CRITICAL: Return the SHOP object, not just a message
         res.status(200).json(shop); 
-        
     } catch (error) {
-        console.error("Delete Error:", error);
         res.status(500).json({ message: error.message });
     }
-}
+};
+
+// 7. GET SINGLE ITEM BY ID
+export const getItemById = async (req, res) => {
+    try {
+        const { itemId } = req.params;
+        const item = await Item.findById(itemId);
+        if (!item) return res.status(404).json({ message: "Item not found" });
+        res.status(200).json(item);
+    } catch (error) {
+        res.status(500).json({ message: error.message });
+    }
+};

@@ -1,34 +1,36 @@
 import dotenv from "dotenv";
 dotenv.config();
 import express from "express";
-import userRouter from './routes/user.routes.js';
+import cors from "cors";
+import cookieParser from "cookie-parser";
 
 import connectDB from "./config/db.js";
-import cookieParser from "cookie-parser";
+import userRouter from './routes/user.routes.js';
 import authRouter from "./routes/auth.routes.js";
-import cors from "cors";
 import shopRouter from "./routes/shop.routes.js";
 import itemRouter from "./routes/item.routes.js";
 
-
-
 const app = express();
+
+// Middleware
 app.use(cors({
     origin: "http://localhost:5173",
     credentials: true,
 }));
-
 app.use(express.json());
 app.use(cookieParser());
+
+// Routes
 app.use("/api/auth", authRouter);
 app.use("/api/user", userRouter);
-app.use("/api/shop", shopRouter);
 app.use("/api/item", itemRouter);
 
+// UPDATED: Added /v1/shops to match your Frontend request
+app.use("/api/v1/shops", shopRouter); 
 
+const PORT = process.env.PORT || 8000; // Standardizing to 8000 based on your App.jsx
 
-app.listen(process.env.PORT || 5000, () => {
-    
+app.listen(PORT, () => {
     connectDB();
-    console.log(`Server is running on port ${process.env.PORT || 5000}`);
+    console.log(`Server is running on port ${PORT}`);
 });
