@@ -57,57 +57,56 @@ function CreateEditShop() {
             setImagePreview(URL.createObjectURL(file));
         }
     };
+const handleSubmit = async (e) => {
+    e.preventDefault();
+    setLoading(true);
+    const toastId = toast.loading(myShopData ? "Updating shop..." : "Creating shop...");
 
-    const handleSubmit = async (e) => {
-        e.preventDefault();
-        setLoading(true);
-        const toastId = toast.loading(myShopData ? "Updating shop..." : "Creating shop...");
+    const data = new FormData();
+    data.append("name", formData.name);
+    data.append("city", formData.city);
+    data.append("state", formData.state);
+    data.append("address", formData.address);
+    
+    if (imageFile) {
+        data.append("image", imageFile);
+    }
 
-        const data = new FormData();
-        data.append("name", formData.name);
-        data.append("city", formData.city);
-        data.append("state", formData.state);
-        data.append("address", formData.address);
+    try {
+        const result = await axios.post(`${serverUrl}/api/v1/shops/create-edit`, data, { 
+            withCredentials: true,
+            headers: { "Content-Type": "multipart/form-data" }
+        });
+
+        // 1. Get the shop object from the response
+        const updatedShopBase = result.data.shop || result.data;
+
+        // 2. Critical Fix: Ensure we don't lose items during an edit
+        // We also ensure the object has an _id property so the dashboard recognizes it
+        const finalData = {
+            ...updatedShopBase,
+            _id: updatedShopBase._id || updatedShopBase.id || myShopData?._id,
+            items: (updatedShopBase.items && updatedShopBase.items.length > 0 && typeof updatedShopBase.items[0] === 'object') 
+                ? updatedShopBase.items 
+                : (myShopData?.items || [])
+        };
+
+        // 3. Update Redux FIRST
+        dispatch(setMyShopData(finalData));
         
-        if (imageFile) {
-            data.append("image", imageFile);
-        }
+        toast.success(myShopData ? "Shop updated successfully!" : "Shop created successfully!", { id: toastId });
 
-        try {
-            const result = await axios.post(`${serverUrl}/api/shop/create-edit`, data, { 
-                withCredentials: true,
-                headers: { "Content-Type": "multipart/form-data" }
-            });
+        // 4. Navigate to the dashboard immediately to see the change
+        navigate('/home'); 
 
-            // Extract updated shop from response
-            const updatedShopBase = result.data.shop || result.data;
-
-            // --- THE FIX ---
-            // We check if the server returned full item objects. 
-            // If it returned empty or just IDs, we merge our existing Redux items back in.
-            const finalData = {
-                ...updatedShopBase,
-                items: (updatedShopBase.items && updatedShopBase.items.length > 0 && typeof updatedShopBase.items[0] === 'object') 
-                    ? updatedShopBase.items 
-                    : (myShopData?.items || [])
-            };
-
-            dispatch(setMyShopData(finalData));
-            
-            toast.success(myShopData ? "Shop updated successfully!" : "Shop created successfully!", { id: toastId });
-
-            setTimeout(() => {
-                navigate('/home'); 
-            }, 1000);
-
-        } catch (error) {
-            console.error("Form Submission Error:", error.response?.data || error.message);
-            const errorMsg = error.response?.data?.message || "Failed to save shop";
-            toast.error(errorMsg, { id: toastId });
-            setLoading(false); 
-        }
-    };
-
+    } catch (error) {
+        console.error("Form Submission Error:", error.response?.data || error.message);
+        const errorMsg = error.response?.data?.message || "Failed to save shop";
+        toast.error(errorMsg, { id: toastId });
+    } finally {
+        setLoading(false);
+    }
+};
     const inputStyle = "w-full p-3 rounded-lg border border-gray-300 outline-none focus:border-[#ff4d2d] transition-colors duration-200 text-gray-700";
 
     return (

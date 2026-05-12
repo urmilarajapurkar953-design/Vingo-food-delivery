@@ -5,7 +5,7 @@ const itemSchema = new mongoose.Schema({
         type: String,
         required: true,
     },
-    image :{
+    image: {
         type: String,
         required: true,
     },
@@ -17,18 +17,10 @@ const itemSchema = new mongoose.Schema({
     category: {
         type: String,
         enum: [
-  "Snacks",
-  "Main Course",
-  "Desserts",
-  "Pizza",
-  "Burgers",
-  "Sandwiches",
-  "South Indian",
-  "North Indian",
-  "Chinese",
-  "Fast Food",
-  "Others"
-],
+            "Snacks", "Main Course", "Desserts", "Pizza", "Burgers",
+            "Sandwiches", "South Indian", "North Indian", "Chinese",
+            "Fast Food", "Others"
+        ],
         required: true,
     },
     price: {

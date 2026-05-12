@@ -4,41 +4,43 @@ import Item from "../models/Item.model.js";
 import fs from "fs";
 
 // 1. GET ALL SHOPS (Crucial for UserDashboard)
+// 1. GET ALL SHOPS (Filtered by City)
 export const getAllShops = async (req, res) => {
     try {
-        // Fetches every shop in the database for the general feed
-        const shops = await Shop.find().populate("owner items");
+        const { city } = req.query; // Get city from URL: ?city=Mumbai
+        
+        let query = {};
+        if (city && city !== "your area") {
+            // Using regex for case-insensitive matching
+            query.city = { $regex: new RegExp(city, "i") };
+        }
+
+        const shops = await Shop.find(query).populate("owner items");
         return res.status(200).json(shops);
     } catch (error) {
         res.status(500).json({ message: error.message });
     }
 };
 
-// 2. CREATE OR EDIT SHOP (Owner Only)
+// 2. CREATE OR EDIT SHOP
 export const createEditShop = async (req, res) => {
     try {
         const { name, city, state, address } = req.body;
         const ownerId = req.user?._id;
 
-        if (!ownerId) {
-            return res.status(401).json({ message: "Unauthorized. Please login." });
-        }
+        if (!ownerId) return res.status(401).json({ message: "Unauthorized." });
 
         let shop = await Shop.findOne({ owner: ownerId });
         let imageUrl = shop ? shop.image : ""; 
 
         if (req.file) {
             const uploadResponse = await uploadOnCloudinary(req.file.path);
-            if (uploadResponse && uploadResponse.secure_url) {
+            if (uploadResponse?.secure_url) {
                 imageUrl = uploadResponse.secure_url;
-            } else {
-                return res.status(500).json({ message: "Failed to upload image" });
             }
         }
 
-        if (!imageUrl) {
-            return res.status(400).json({ message: "Shop image is required" });
-        }
+        if (!imageUrl) return res.status(400).json({ message: "Shop image is required" });
 
         if (!shop) {
             shop = await Shop.create({
@@ -47,14 +49,15 @@ export const createEditShop = async (req, res) => {
                 owner: ownerId,
             });
         } else {
+            // Using returnDocument: 'after' for the latest Mongoose standards
             shop = await Shop.findByIdAndUpdate(
                 shop._id, 
                 { name, city, state, address, image: imageUrl }, 
-                { new: true }
+                { returnDocument: 'after', runValidators: true }
             );
         }
 
-        await shop.populate("owner"); 
+        await shop.populate("owner items"); 
         return res.status(200).json({ message: "Shop saved successfully", shop });
 
     } catch (error) {
@@ -62,16 +65,13 @@ export const createEditShop = async (req, res) => {
         res.status(500).json({ message: error.message || "Internal Server Error" });
     }
 };
-
-// 3. GET LOGGED-IN USER'S SHOP
+// ... rest of controller (addItem, etc.) remains same
+// Ensure getMyShop also handles the empty state correctly
 export const getMyShop = async (req, res) => {
     try {
-        if (!req.user?._id) {
-            return res.status(401).json({ message: "Unauthorized" });
-        }
-
         const shop = await Shop.findOne({ owner: req.user._id }).populate("owner items");
-        return res.status(200).json(shop || {}); 
+        // Return null if no shop, so frontend loading logic works correctly
+        return res.status(200).json(shop); 
     } catch (error) {
         res.status(500).json({ message: error.message });
     }
@@ -179,6 +179,34 @@ export const getItemById = async (req, res) => {
         const item = await Item.findById(itemId);
         if (!item) return res.status(404).json({ message: "Item not found" });
         res.status(200).json(item);
+    } catch (error) {
+        res.status(500).json({ message: error.message });
+    }
+};
+
+
+
+export const getItemsByCity = async (req, res) => {
+    try {
+        const { city } = req.query;
+
+        let query = {};
+        if (city && city !== "your area" && city !== "undefined" && city !== "null") {
+            // Find shops in that city first
+            const shopsInCity = await Shop.find({ 
+                city: { $regex: new RegExp(city.trim(), "i") } 
+            }).select("_id");
+
+            const shopIds = shopsInCity.map(shop => shop._id);
+            query = { shop: { $in: shopIds } };
+        }
+
+        // Fetch items and ONLY populate the shop name to avoid image confusion
+        const items = await Item.find(query)
+            .populate("shop", "name") // We only need the shop name for the UI
+            .sort({ createdAt: -1 });
+
+        return res.status(200).json(items);
     } catch (error) {
         res.status(500).json({ message: error.message });
     }
