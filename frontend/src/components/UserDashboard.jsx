@@ -119,50 +119,30 @@ function UserDashboard() {
 
       {/* SUGGESTED ITEMS GRID */}
       <div className="w-full max-w-6xl">
-  <h1 className='text-gray-800 text-2xl font-bold mb-6'>Suggested items</h1>
-  <div className='grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6'>
-    {itemsLoading ? (
-      <p className="col-span-full text-center py-10">Loading items...</p>
-    ) : suggestedItems.length > 0 ? (
-      suggestedItems.map((item) => (
-        <div key={item._id} className="bg-white rounded-3xl p-3 border border-gray-100 shadow-sm hover:shadow-md transition-all">
-          <div className="relative h-44 w-full rounded-2xl overflow-hidden bg-gray-50">
-            {/* item.image points to the item DB field. 
-                If you see a shop here, the URL in your DB is wrong! */}
-            <img 
-              src={item.image} 
-              alt={item.name} 
-              className="w-full h-full object-cover hover:scale-105 transition-transform duration-500" 
-            />
-            <div className="absolute top-2 right-2 bg-white/90 px-3 py-1 rounded-full text-xs font-black text-[#ff4d2d]">
-              ₹{item.price}
+        <h1 className='text-gray-800 text-2xl font-bold mb-6'>Suggested items</h1>
+        <div className='grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6'>
+          {itemsLoading ? (
+            <p className="col-span-full text-center">Loading items...</p>
+          ) : suggestedItems.map((item) => (
+            <div key={item._id} className="bg-white rounded-3xl p-3 border border-gray-100 shadow-sm hover:shadow-md transition-all">
+              <div className="relative h-44 w-full rounded-2xl overflow-hidden">
+                <img src={item.image} alt={item.name} className="w-full h-full object-cover" />
+                <div className="absolute top-2 right-2 bg-white/90 px-3 py-1 rounded-full text-xs font-black text-[#ff4d2d]">₹{item.price}</div>
+              </div>
+              <div className="mt-4">
+                <h3 className="font-extrabold text-gray-800 truncate">{item.name}</h3>
+                <p className="text-xs text-gray-400 font-medium">{item.shop?.name || "Partner Shop"}</p>
+                <div className="flex justify-between items-center mt-4">
+                  <span className={`text-[10px] font-bold px-2 py-1 rounded-md ${item.foodType === 'veg' ? 'bg-green-50 text-green-600' : 'bg-red-50 text-red-600'}`}>
+                    {item.foodType}
+                  </span>
+                  <button className="bg-[#ff4d2d] text-white p-2 rounded-xl"><FaPlus size={14} /></button>
+                </div>
+              </div>
             </div>
-          </div>
-          <div className="mt-4">
-            <h3 className="font-extrabold text-gray-800 truncate uppercase text-sm tracking-tight">{item.name}</h3>
-            {/* item.shop.name comes from the .populate("shop") in backend */}
-            <p className="text-xs text-gray-400 font-medium truncate">{item.shop?.name || "Local Shop"}</p>
-            
-            <div className="flex justify-between items-center mt-4">
-              <span className={`text-[10px] font-bold px-2 py-1 rounded-md uppercase ${
-                item.foodType?.toLowerCase() === 'veg' 
-                ? 'bg-green-50 text-green-600' 
-                : 'bg-red-50 text-red-600'
-              }`}>
-                {item.foodType}
-              </span>
-              <button className="bg-[#ff4d2d] text-white p-2 rounded-xl hover:bg-orange-600 transition-colors">
-                <FaPlus size={14} />
-              </button>
-            </div>
-          </div>
+          ))}
         </div>
-      ))
-    ) : (
-      <p className="col-span-full text-center text-gray-500 py-10">No suggested items found.</p>
-    )}
-  </div>
-</div>
+      </div>
     </div>
   );
 }
