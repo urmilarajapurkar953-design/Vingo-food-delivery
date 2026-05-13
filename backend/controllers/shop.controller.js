@@ -81,24 +81,27 @@ export const getMyShop = async (req, res) => {
 export const addItem = async (req, res) => {
     try {
         const { name, category, foodType, price } = req.body;
-        let imageUrl = "";
+        
+        // 1. Check if file actually exists
+        if (!req.file) {
+            return res.status(400).json({ message: "Food item image is required" });
+        }
 
-        if (req.file) {
-            const result = await uploadOnCloudinary(req.file.path);
-            if (result) imageUrl = result.secure_url;
+        const result = await uploadOnCloudinary(req.file.path);
+        if (!result?.secure_url) {
+            return res.status(500).json({ message: "Failed to upload image to Cloudinary" });
         }
 
         const shop = await Shop.findOne({ owner: req.user._id });
-        if (!shop) {
-            return res.status(400).json({ message: "Shop not found for the user" });
-        }
+        if (!shop) return res.status(404).json({ message: "Shop not found" });
 
+        // 2. Create item with the NEWLY uploaded result ONLY
         const item = await Item.create({
             name,
             category,
             foodType,
             price: Number(price), 
-            image: imageUrl,
+            image: result.secure_url, // Strict assignment
             shop: shop._id,
         });
 
@@ -111,13 +114,10 @@ export const addItem = async (req, res) => {
         ]);
 
         return res.status(201).json(shop);
-
     } catch (error) {
-        console.error("Add Item Error:", error);
         res.status(500).json({ message: error.message });
     }
 };
-
 // 5. EDIT EXISTING ITEM
 export const editItem = async (req, res) => {
     try {
