@@ -6,7 +6,7 @@ import toast from 'react-hot-toast';
 import { GoogleAuthProvider, signInWithPopup } from 'firebase/auth';
 import { auth } from '../../firebase';
 import { useDispatch, useSelector } from 'react-redux'; // Added useSelector
-import { setUserData } from '../redux/user.slice';
+import { setUserData } from '../redux/user.Slice';
 
 function SignIn() {
   const navigate = useNavigate();

@@ -3,8 +3,9 @@ import CategoryCard from './CategoryCard.jsx';
 import { categories } from '../category.js';
 import { FaChevronLeft, FaChevronRight, FaStar, FaBiking, FaStoreSlash, FaPlus, FaMinus, FaShoppingCart } from 'react-icons/fa';
 import axios from 'axios';
-import { useSelector } from 'react-redux';
+import { useSelector, useDispatch } from 'react-redux'; // Added useDispatch
 import { serverUrl } from '../App'; 
+import { addToCart, decrementQuantity } from '../redux/user.Slice.js'; // Import Redux actions
 
 function UserDashboard() {
   const scrollRef = useRef(null);
@@ -15,17 +16,13 @@ function UserDashboard() {
   const [suggestedItems, setSuggestedItems] = useState([]);
   const [itemsLoading, setItemsLoading] = useState(true);
 
-  // Local state for quantity tracking
-  const [cart, setCart] = useState({});
+  const dispatch = useDispatch();
+  const { currentCity, cartItem } = useSelector((state) => state.user || { cartItem: [] });
 
-  const { currentCity } = useSelector((state) => state.user || {});
-
-  const handleQuantityChange = (itemId, delta) => {
-    setCart((prev) => {
-      const currentQty = prev[itemId] || 0;
-      const newQty = Math.max(0, currentQty + delta);
-      return { ...prev, [itemId]: newQty };
-    });
+  // Connect Local UI to Redux State
+  const getItemQty = (itemId) => {
+    const item = cartItem.find((i) => i._id === itemId);
+    return item ? item.quantity : 0;
   };
 
   const checkScroll = () => {
@@ -50,28 +47,38 @@ function UserDashboard() {
     scrollRef.current.scrollBy({ left: direction === 'left' ? -amount : amount, behavior: 'smooth' });
   };
 
-  useEffect(() => {
-    const fetchShops = async () => {
-      setLoading(true);
-      try {
-        const cityParam = currentCity || "";
-        const response = await axios.get(`${serverUrl}/api/v1/shops/all?city=${cityParam}`);
-        setAllShops(Array.isArray(response.data) ? response.data : []);
-      } catch (error) {
-        console.error("Shop Fetch Error:", error);
-      } finally {
-        setLoading(false);
-      }
-    };
-    fetchShops();
-  }, [currentCity]);
+  // Fixed Shop Fetching logic
+useEffect(() => {
+  const fetchShops = async () => {
+    // If currentCity is null (still loading), don't fetch yet
+    if (currentCity === null) return; 
+
+    setLoading(true);
+    try {
+      // Use an empty string if currentCity is "Location Denied" or "Unknown"
+      const cityQuery = (currentCity === "Location Denied" || currentCity === "Unknown Location") ? "" : currentCity;
+      
+      const response = await axios.get(`${serverUrl}/api/v1/shops/all`, {
+        params: { city: cityQuery }
+      });
+      setAllShops(Array.isArray(response.data) ? response.data : []);
+    } catch (error) {
+      console.error("Shop Fetch Error:", error);
+    } finally {
+      setLoading(false);
+    }
+  };
+  
+  fetchShops();
+}, [currentCity]);
 
   useEffect(() => {
     const fetchItems = async () => {
       setItemsLoading(true);
       try {
-        const cityParam = currentCity || "";
-        const response = await axios.get(`${serverUrl}/api/item/city-items?city=${cityParam}`);
+        const response = await axios.get(`${serverUrl}/api/item/city-items`, {
+          params: { city: currentCity }
+        });
         setSuggestedItems(Array.isArray(response.data) ? response.data : []);
       } catch (error) {
         console.error("Items Fetch Error:", error);
@@ -83,7 +90,7 @@ function UserDashboard() {
   }, [currentCity]);
 
   return (
-    <div className='w-full flex flex-col gap-8 items-center bg-[#fff9f6] pb-20 px-4'>
+    <div className='w-full flex flex-col gap-8 items-center bg-[#fff9f6] pb-20 px-4 pt-20'>
       
       {/* CATEGORY SLIDER */}
       <div className="w-full max-w-6xl mt-8">
@@ -108,7 +115,7 @@ function UserDashboard() {
         </h1>
         <div className='grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-8'>
           {loading ? (
-            <p className="col-span-full text-center py-10">Loading shops...</p>
+            <p className="col-span-full text-center py-10 italic text-gray-400">Finding delicious spots...</p>
           ) : allShops.length > 0 ? (
             allShops.map((shop) => (
               <div key={shop._id} className='group cursor-pointer'>
@@ -123,7 +130,10 @@ function UserDashboard() {
               </div>
             ))
           ) : (
-            <div className="col-span-full text-center py-10"><FaStoreSlash className="mx-auto mb-2" size={40}/> No shops found.</div>
+            <div className="col-span-full text-center py-10 text-gray-500">
+               <FaStoreSlash className="mx-auto mb-2 text-gray-300" size={40}/> 
+               No shops found in {currentCity || 'your area'}.
+            </div>
           )}
         </div>
       </div>
@@ -133,9 +143,9 @@ function UserDashboard() {
         <h1 className='text-gray-800 text-2xl font-bold mb-6'>Suggested items</h1>
         <div className='grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6'>
           {itemsLoading ? (
-            <p className="col-span-full text-center">Loading items...</p>
+            <p className="col-span-full text-center italic text-gray-400">Loading items...</p>
           ) : suggestedItems.map((item) => {
-            const itemQty = cart[item._id] || 0;
+            const itemQty = getItemQty(item._id);
             
             return (
               <div 
@@ -148,8 +158,6 @@ function UserDashboard() {
                     alt={item.name} 
                     className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" 
                   />
-                  
-                  {/* Veg/Non-Veg Tag - Top Right */}
                   <div className={`absolute top-2 right-2 px-2 py-1 rounded-full text-[10px] font-bold shadow-sm ${item.foodType === 'veg' ? 'bg-green-50/90 text-green-600' : 'bg-red-50/90 text-red-600'}`}>
                     {item.foodType}
                   </div>
@@ -162,15 +170,13 @@ function UserDashboard() {
                   <p className="text-xs text-gray-400 font-medium">{item.shop?.name || "Partner Shop"}</p>
                   
                   <div className="flex justify-between items-center mt-4">
-                    {/* Price - Bottom Left */}
                     <span className="text-sm font-black text-[#ff4d2d]">
                         ₹{item.price}
                     </span>
                     
-                    {/* Quantity Controller */}
                     <div className="flex items-center bg-[#ff4d2d] text-white rounded-2xl overflow-hidden shadow-sm">
                       <button 
-                        onClick={(e) => { e.stopPropagation(); handleQuantityChange(item._id, -1); }}
+                        onClick={(e) => { e.stopPropagation(); dispatch(decrementQuantity(item._id)); }}
                         className="p-2 hover:bg-[#e64429] transition-colors"
                       >
                         <FaMinus size={10} />
@@ -181,7 +187,7 @@ function UserDashboard() {
                       </span>
 
                       <button 
-                        onClick={(e) => { e.stopPropagation(); handleQuantityChange(item._id, 1); }}
+                        onClick={(e) => { e.stopPropagation(); dispatch(addToCart(item)); }}
                         className="p-2 border-r border-white/20 hover:bg-[#e64429] transition-colors"
                       >
                         <FaPlus size={10} />

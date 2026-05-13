@@ -14,6 +14,7 @@ import CreateEditShop from './pages/CreateEditShop'
 import { useLocation } from 'react-router-dom';
 import AddItem from './pages/AddItem'
 import EditItem from './pages/EditItem'
+import Cart from './pages/Cart'
 
 export const serverUrl = 'http://localhost:8000'
 
@@ -47,6 +48,7 @@ const { userData } = useSelector((state) => state.user || {});
         <Route path="/add-item" element={userData ? <AddItem /> : <Navigate to="/signin" />} />
         <Route path="/edit-item/:itemId" element={userData ? <EditItem /> : <Navigate to="/signin" />} />
         <Route path="/forgot-password" element={<ForgotPassword />} />
+        <Route path="/cart" element={<Cart />} />
 
 
         <Route path="*" element={<div>404 - Not Found</div>} />

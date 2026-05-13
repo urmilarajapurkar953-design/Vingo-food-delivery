@@ -6,11 +6,12 @@ import { LuLayoutList } from "react-icons/lu";
 import { useSelector, useDispatch } from 'react-redux'; 
 import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
-import { setUserData } from '../redux/user.slice'; 
+import { setUserData } from '../redux/user.Slice'; 
 import { serverUrl } from '../App'; 
 
 function Nav() {
-  const { userData, currentCity, currentAddress } = useSelector((state) => state.user);
+  // Added cartItem to the selector
+  const { userData, currentCity, currentAddress, cartItem } = useSelector((state) => state.user);
   const { myShopData } = useSelector((state) => state.owner);
   
   const [showInfo, setShowInfo] = useState(false);
@@ -18,6 +19,9 @@ function Nav() {
   
   const dispatch = useDispatch(); 
   const navigate = useNavigate();
+
+  // Calculate total quantity of all items in cart
+  const totalCartItems = cartItem?.reduce((acc, item) => acc + item.quantity, 0) || 0;
 
   const handleLogout = async () => {
     try {
@@ -83,9 +87,17 @@ function Nav() {
             <button className='md:hidden p-2 text-gray-600' onClick={() => setIsMobileSearchOpen(true)}>
               <IoIosSearch size={26} />
             </button>
-            <div className='relative cursor-pointer text-gray-700 hover:text-[#ff4d2d] transition-colors'>
+            {/* Added onClick navigate and dynamic count badge */}
+            <div 
+              className='relative cursor-pointer text-gray-700 hover:text-[#ff4d2d] transition-colors p-2'
+              onClick={() => navigate('/cart')}
+            >
               <FiShoppingCart size={24} />
-              <span className='absolute -top-2 -right-2 bg-[#ff4d2d] text-white text-[10px] w-4 h-4 rounded-full flex items-center justify-center font-bold'>0</span>
+              {totalCartItems > 0 && (
+                <span className='absolute top-0 right-0 bg-[#ff4d2d] text-white text-[10px] w-4 h-4 rounded-full flex items-center justify-center font-bold border border-white'>
+                  {totalCartItems}
+                </span>
+              )}
             </div>
           </>
         )}
@@ -106,7 +118,6 @@ function Nav() {
                 <button className='relative flex items-center gap-2 text-gray-700 hover:text-[#ff4d2d] transition-all font-semibold text-sm group'>
                   <div className='relative'>
                     <LuLayoutList size={22} className='group-hover:scale-110 transition-transform' />
-                    {/* Dynamic Order Notification Badge */}
                     <span className='absolute -top-2 -right-2 bg-[#ff4d2d] text-white text-[10px] w-4 h-4 rounded-full flex items-center justify-center font-bold border-2 border-[#fff9f6]'>
                         0
                     </span>
