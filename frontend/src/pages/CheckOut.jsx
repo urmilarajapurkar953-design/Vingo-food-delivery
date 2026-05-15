@@ -4,10 +4,43 @@ import { FaMapMarkerAlt, FaMoneyBillWave, FaCreditCard, FaSearch, FaCrosshairs }
 import { useNavigate } from 'react-router-dom';
 import toast from 'react-hot-toast';
 import axios from 'axios';
-import  clearCart  from '../redux/user.Slice'; // Kept exactly as you requested
+import 'leaflet/dist/leaflet.css'; // Import it right here
+
+// Redux Actions
+import  clearCart  from '../redux/user.Slice'; 
+import { setLocation, setAddress } from '../redux/mapSlice';
+
+// Leaflet Imports
+import { MapContainer, TileLayer, Marker, useMap } from 'react-leaflet';
+import 'leaflet/dist/leaflet.css';
+import L from 'leaflet';
+
+// Fix for Leaflet default icon issue in React
+import markerIcon from 'leaflet/dist/images/marker-icon.png';
+import markerShadow from 'leaflet/dist/images/marker-shadow.png';
+let DefaultIcon = L.icon({
+    iconUrl: markerIcon,
+    shadowUrl: markerShadow,
+    iconSize: [25, 41],
+    iconAnchor: [12, 41]
+});
+L.Marker.prototype.options.icon = DefaultIcon;
+
+// Helper component to move the map view when coordinates change
+function RecenterMap({ lat, lon }) {
+  const map = useMap();
+  useEffect(() => {
+    if (lat && lon) {
+      map.setView([lat, lon], 15);
+    }
+  }, [lat, lon, map]);
+  return null;
+}
 
 const CheckOut = () => {
   const { cartItem, currentAddress } = useSelector((state) => state.user);
+  const { location } = useSelector((state) => state.map);
+  
   const navigate = useNavigate();
   const dispatch = useDispatch();
   
@@ -15,38 +48,64 @@ const CheckOut = () => {
   const [paymentMethod, setPaymentMethod] = useState('COD');
   const [loading, setLoading] = useState(false);
 
+  // Sync initial address from Redux
   useEffect(() => {
-    if (currentAddress) {
-      setDeliveryAddress(currentAddress);
-    }
+    if (currentAddress) setDeliveryAddress(currentAddress);
   }, [currentAddress]);
 
   const subtotal = cartItem.reduce((acc, item) => acc + item.price * item.quantity, 0);
   const deliveryFee = 40; 
   const total = subtotal + deliveryFee;
 
-  const handlePlaceOrder = async () => {
-    if (!deliveryAddress || deliveryAddress.trim() === "") {
-      return toast.error("Please provide a delivery address");
+  /**
+   * SEARCH FUNCTION: 
+   * Takes the text in the input and finds coordinates via Geoapify
+   */
+  const handleSearchAddress = async () => {
+    if (!deliveryAddress || deliveryAddress.trim().length < 3) {
+      return toast.error("Please enter a valid address to search.");
     }
+
+    setLoading(true);
+    try {
+      const response = await axios.get(
+        `https://api.geoapify.com/v1/geocode/search?text=${encodeURIComponent(deliveryAddress)}&apiKey=${import.meta.env.VITE_GEOAPIKEY}`
+      );
+
+      if (response.data.features && response.data.features.length > 0) {
+        const { lat, lon, formatted } = response.data.features[0].properties;
+        
+        // Update Map Redux State
+        dispatch(setLocation({ lat, lon }));
+        dispatch(setAddress(formatted));
+        
+        // Update Local Input
+        setDeliveryAddress(formatted);
+        toast.success("Map updated to search result");
+      } else {
+        toast.error("Location not found. Try adding city or pin code.");
+      }
+    } catch (error) {
+      console.error("Geocoding error:", error);
+      toast.error("Failed to search location.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handlePlaceOrder = async () => {
+    if (!deliveryAddress?.trim()) return toast.error("Please provide a delivery address");
 
     setLoading(true);
     try {
       const orderData = {
         paymentMethod,
-        deliveryAddress: {
-          text: deliveryAddress,
-        },
-        items: cartItem.map(item => ({
-          product: item._id,
-          quantity: item.quantity
-        })),
+        deliveryAddress: { text: deliveryAddress },
+        items: cartItem.map(item => ({ product: item._id, quantity: item.quantity })),
         totalAmount: total
       };
 
-      const response = await axios.post('http://localhost:8000/api/orders/place', orderData, {
-        withCredentials: true
-      });
+      const response = await axios.post('http://localhost:8000/api/orders/place', orderData, { withCredentials: true });
 
       if (response.data.success) {
         toast.success("Order Placed Successfully!");
@@ -73,36 +132,55 @@ const CheckOut = () => {
           </div>
           
           <div className="flex gap-2 mb-4">
-            {/* Input field for manual editing */}
             <input 
               type="text"
               value={deliveryAddress}
               onChange={(e) => setDeliveryAddress(e.target.value)}
-              placeholder="Enter your delivery address..."
+              placeholder="Search or type address..."
               className="flex-1 bg-gray-50 p-3 rounded-xl border border-gray-200 text-sm text-gray-600 focus:outline-none focus:border-orange-500"
             />
             
-            {/* YOUR SEARCH ICON (Orange Button) */}
+            {/* SEARCH BUTTON (Manual Search) */}
             <button 
-              type="button"
-              className="bg-orange-500 p-3 rounded-xl text-white hover:bg-orange-600 transition-colors"
+              type="button" 
+              onClick={handleSearchAddress}
+              disabled={loading}
+              className="bg-orange-500 p-3 rounded-xl text-white hover:bg-orange-600 transition-colors disabled:bg-gray-400"
             >
               <FaSearch />
             </button>
 
-            {/* LIVE LOCATION ICON (Blue Button) */}
+            {/* LIVE LOCATION BUTTON */}
             <button 
               type="button"
               onClick={() => setDeliveryAddress(currentAddress)}
-              title="Use current location"
               className="bg-blue-500 p-3 rounded-xl text-white hover:bg-blue-600 transition-colors"
             >
               <FaCrosshairs />
             </button>
           </div>
 
-          <div className="w-full h-40 bg-gray-200 rounded-2xl flex items-center justify-center overflow-hidden border border-gray-100">
-             <img src="https://api.mapbox.com/styles/v1/mapbox/streets-v11/static/80.23,25.44,12/600x200?access_token=YOUR_MAP_TOKEN" alt="map" className="w-full h-full object-cover" />
+          {/* MAP CONTAINER */}
+          <div className="w-full h-64 bg-gray-200 rounded-2xl overflow-hidden border border-gray-100 z-0">
+            {location.lat && location.lon ? (
+              <MapContainer 
+                center={[location.lat, location.lon]} 
+                zoom={15} 
+                style={{ height: '100%', width: '100%' }}
+                scrollWheelZoom={false}
+              >
+                <TileLayer
+                  url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+                  attribution='&copy; OpenStreetMap contributors'
+                />
+                <Marker position={[location.lat, location.lon]} />
+                <RecenterMap lat={location.lat} lon={location.lon} />
+              </MapContainer>
+            ) : (
+              <div className="flex items-center justify-center h-full text-gray-400">
+                Detecting location on map...
+              </div>
+            )}
           </div>
         </div>
 
@@ -117,7 +195,7 @@ const CheckOut = () => {
               <div className="bg-green-100 p-2 rounded-lg text-green-600"><FaMoneyBillWave /></div>
               <div>
                 <p className="font-bold text-sm">Cash on Delivery</p>
-                <p className="text-[10px] text-gray-500">Pay when food arrives</p>
+                <p className="text-[10px] text-gray-500">Pay at your doorstep</p>
               </div>
             </div>
             <div 
@@ -127,34 +205,34 @@ const CheckOut = () => {
               <div className="bg-purple-100 p-2 rounded-lg text-purple-600"><FaCreditCard /></div>
               <div>
                 <p className="font-bold text-sm">UPI / Cards</p>
-                <p className="text-[10px] text-gray-500">Pay securely online</p>
+                <p className="text-[10px] text-gray-500">Secure online payment</p>
               </div>
             </div>
           </div>
         </div>
 
-        {/* Order Summary Section */}
+        {/* Order Summary */}
         <div className="mb-8">
           <h2 className="font-bold mb-4">Order Summary</h2>
-          <div className="space-y-3 border-t border-b border-dashed border-gray-200 py-4">
+          <div className="space-y-3 border-t border-b border-dashed border-gray-200 py-4 text-sm">
             {cartItem.map(item => (
-               <div key={item._id} className="flex justify-between text-sm">
+               <div key={item._id} className="flex justify-between">
                  <span className="text-gray-600">{item.name} × {item.quantity}</span>
                  <span className="font-medium">₹{item.price * item.quantity}</span>
                </div>
             ))}
-            <div className="flex justify-between text-sm">
+            <div className="flex justify-between pt-2">
               <span className="text-gray-500">Subtotal</span>
               <span className="font-bold">₹{subtotal}</span>
             </div>
-            <div className="flex justify-between text-sm">
+            <div className="flex justify-between">
               <span className="text-gray-500">Delivery Fee</span>
               <span className="font-bold">₹{deliveryFee}</span>
             </div>
           </div>
           <div className="flex justify-between mt-4">
             <span className="text-lg font-bold text-red-500">Total</span>
-            <span className="text-lg font-black text-red-500">₹{total}</span>
+            <span className="text-xl font-black text-red-500">₹{total}</span>
           </div>
         </div>
 
@@ -163,7 +241,7 @@ const CheckOut = () => {
           disabled={loading}
           className="w-full bg-[#ff4d2d] text-white py-4 rounded-2xl font-bold shadow-lg active:scale-95 transition-all disabled:bg-gray-400"
         >
-          {loading ? "Processing..." : "Place Order"}
+          {loading ? "Processing Order..." : "Place Order"}
         </button>
       </div>
     </div>
