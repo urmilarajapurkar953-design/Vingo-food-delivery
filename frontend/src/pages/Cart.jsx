@@ -4,10 +4,16 @@ import { FaPlus, FaMinus, FaTrash, FaArrowLeft } from 'react-icons/fa';
 import { addToCart, decrementQuantity, removeFromCart } from '../redux/user.Slice';
 import { useNavigate } from 'react-router-dom';
 
+
 const Cart = () => {
   const { cartItem } = useSelector((state) => state.user);
   const dispatch = useDispatch();
   const navigate = useNavigate();
+
+  const handleCheckout = () => {
+    // Navigate to the checkout route you defined in App.js
+    navigate('/checkout');
+  };
 
   const totalPrice = cartItem.reduce((acc, item) => acc + (item.price * item.quantity), 0);
 
@@ -73,8 +79,11 @@ const Cart = () => {
               <span className="text-lg font-bold">Total</span>
               <span className="text-lg font-black text-[#ff4d2d]">₹{totalPrice}</span>
             </div>
-            <button className="w-full bg-[#ff4d2d] text-white py-4 rounded-2xl font-bold shadow-lg shadow-orange-100 hover:bg-[#e64429] transition-all">
-              Checkout
+            <button 
+              onClick={handleCheckout}
+              className="w-full bg-[#ff4d2d] text-white py-4 rounded-2xl font-bold shadow-lg shadow-orange-100 hover:bg-[#e64429] transition-all"
+            >
+             Proceed to CheckOut
             </button>
           </div>
         </div>

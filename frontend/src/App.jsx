@@ -15,12 +15,13 @@ import { useLocation } from 'react-router-dom';
 import AddItem from './pages/AddItem'
 import EditItem from './pages/EditItem'
 import Cart from './pages/Cart'
+import CheckOut from './pages/CheckOut'
 
 export const serverUrl = 'http://localhost:8000'
 
 function App() {
   const location = useLocation();
-  const hideNavPaths = ['/create-edit-shop'];
+  const hideNavPaths = ['/create-edit-shop', '/checkout'];
   useGetCurrentUser(); 
   useGetCity();
   useGetMyShop();
@@ -49,6 +50,9 @@ const { userData } = useSelector((state) => state.user || {});
         <Route path="/edit-item/:itemId" element={userData ? <EditItem /> : <Navigate to="/signin" />} />
         <Route path="/forgot-password" element={<ForgotPassword />} />
         <Route path="/cart" element={<Cart />} />
+        <Route path="/checkout" element={userData ? <CheckOut /> : <Navigate to="/signin" />} />
+
+
 
 
         <Route path="*" element={<div>404 - Not Found</div>} />

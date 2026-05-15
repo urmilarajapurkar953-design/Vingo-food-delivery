@@ -1,44 +1,42 @@
-import axios from 'axios'
-import { useEffect } from 'react'
-import { useDispatch, useSelector } from 'react-redux'
-import { setCurrentCity, setCurrentState, setCurrentAddress } from '../redux/user.Slice'
+import { useEffect } from 'react';
+import { useDispatch } from 'react-redux';
+import axios from 'axios';
+import { setCurrentCity, setCurrentState, setCurrentAddress } from '../redux/user.Slice';
+import { setLocation, setAddress } from '../redux/mapSlice';
 
-function useGetCity() {
-  const dispatch = useDispatch()
-  const { currentCity } = useSelector(state => state.user)
+const useGetCity = () => {
+  const dispatch = useDispatch();
 
   useEffect(() => {
-    // Only run if we don't have a city yet
-    if (currentCity) return;
-
-    if (!navigator.geolocation) {
-      dispatch(setCurrentCity("")); // Set to empty string, not "Unknown"
-      return;
-    }
-
-    navigator.geolocation.getCurrentPosition(async (position) => {
+    const fetchLocation = async () => {
       try {
-        const { latitude, longitude } = position.coords;
-        const result = await axios.get(
-          `https://api.geoapify.com/v1/geocode/reverse?lat=${latitude}&lon=${longitude}&format=json&apiKey=${import.meta.env.VITE_GEOAPIKEY}`
-        )
+        navigator.geolocation.getCurrentPosition(async (position) => {
+          const { latitude, longitude } = position.coords;
 
-        const data = result?.data?.results?.[0];
-        // If Geoapify fails, use an empty string so the backend returns "all" shops
-        const cityName = data?.city || data?.village || ""; 
-        
-        dispatch(setCurrentCity(cityName));
-        dispatch(setCurrentState(data?.state || ""));
-        dispatch(setCurrentAddress(data?.formatted || ""));
+          dispatch(setLocation({ lat: latitude, lon: longitude }));
 
+          const response = await axios.get(
+            `https://api.geoapify.com/v1/geocode/reverse?lat=${latitude}&lon=${longitude}&format=json&apiKey=${import.meta.env.VITE_GEOAPIKEY}`
+          );
+
+          // FIX: Geoapify with &format=json uses 'results', not 'features'
+          if (response.data && response.data.results && response.data.results.length > 0) {
+            const addressData = response.data.results[0]; // In JSON format, properties are at the top level
+            const fullAddress = addressData.formatted;
+
+            dispatch(setCurrentCity(addressData.city));
+            dispatch(setCurrentState(addressData.state));
+            dispatch(setCurrentAddress(fullAddress)); 
+            dispatch(setAddress(fullAddress));        
+          }
+        });
       } catch (error) {
         console.error("Error fetching city:", error);
-        dispatch(setCurrentCity("")); 
       }
-    }, () => {
-      dispatch(setCurrentCity("")); // If user denies, set to empty to show all shops
-    });
-  }, [dispatch]); // Removed currentCity from dependencies to prevent loops
-}
+    };
 
-export default useGetCity
+    fetchLocation();
+  }, [dispatch]);
+};
+
+export default useGetCity;
