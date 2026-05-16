@@ -26,14 +26,18 @@ let DefaultIcon = L.icon({
 });
 L.Marker.prototype.options.icon = DefaultIcon;
 
-// Helper component to move the map view when coordinates change
-function RecenterMap({ lat, lon }) {
+// Helper component to move the map view
+function RecenterMap({ lat, lon, forceUpdate }) {
   const map = useMap();
   useEffect(() => {
     if (lat && lon) {
-      map.setView([lat, lon], 15);
+      // Using flyTo for that smooth buttery animation you wanted
+      map.flyTo([lat, lon], 15, {
+        animate: true,
+        duration: 1.5
+      });
     }
-  }, [lat, lon, map]);
+  }, [lat, lon, forceUpdate, map]); // Added forceUpdate to dependency array
   return null;
 }
 
@@ -47,6 +51,8 @@ const CheckOut = () => {
   const [deliveryAddress, setDeliveryAddress] = useState("");
   const [paymentMethod, setPaymentMethod] = useState('COD');
   const [loading, setLoading] = useState(false);
+  // This state helps us "force" the map to snap back even if coordinates haven't changed
+  const [forceMapUpdate, setForceMapUpdate] = useState(0);
 
   // Sync initial address from Redux
   useEffect(() => {
@@ -57,10 +63,6 @@ const CheckOut = () => {
   const deliveryFee = 40; 
   const total = subtotal + deliveryFee;
 
-  /**
-   * SEARCH FUNCTION: 
-   * Takes the text in the input and finds coordinates via Geoapify
-   */
   const handleSearchAddress = async () => {
     if (!deliveryAddress || deliveryAddress.trim().length < 3) {
       return toast.error("Please enter a valid address to search.");
@@ -75,15 +77,20 @@ const CheckOut = () => {
       if (response.data.features && response.data.features.length > 0) {
         const { lat, lon, formatted } = response.data.features[0].properties;
         
-        // Update Map Redux State
+        // Update Redux
         dispatch(setLocation({ lat, lon }));
         dispatch(setAddress(formatted));
         
-        // Update Local Input
+        // Update local input
         setDeliveryAddress(formatted);
-        toast.success("Map updated to search result");
+        
+        // IMPORTANT: Increment this to trigger the useEffect in RecenterMap 
+        // even if lat/lon are the same as before
+        setForceMapUpdate(prev => prev + 1);
+        
+        toast.success("Map centered on location");
       } else {
-        toast.error("Location not found. Try adding city or pin code.");
+        toast.error("Location not found.");
       }
     } catch (error) {
       console.error("Geocoding error:", error);
@@ -140,7 +147,6 @@ const CheckOut = () => {
               className="flex-1 bg-gray-50 p-3 rounded-xl border border-gray-200 text-sm text-gray-600 focus:outline-none focus:border-orange-500"
             />
             
-            {/* SEARCH BUTTON (Manual Search) */}
             <button 
               type="button" 
               onClick={handleSearchAddress}
@@ -150,10 +156,12 @@ const CheckOut = () => {
               <FaSearch />
             </button>
 
-            {/* LIVE LOCATION BUTTON */}
             <button 
               type="button"
-              onClick={() => setDeliveryAddress(currentAddress)}
+              onClick={() => {
+                setDeliveryAddress(currentAddress);
+                setForceMapUpdate(prev => prev + 1); // Also snap back for live location
+              }}
               className="bg-blue-500 p-3 rounded-xl text-white hover:bg-blue-600 transition-colors"
             >
               <FaCrosshairs />
@@ -167,14 +175,15 @@ const CheckOut = () => {
                 center={[location.lat, location.lon]} 
                 zoom={15} 
                 style={{ height: '100%', width: '100%' }}
-                scrollWheelZoom={false}
+                scrollWheelZoom={true} // Changed to true so you can "go around" as requested
               >
                 <TileLayer
                   url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
                   attribution='&copy; OpenStreetMap contributors'
                 />
                 <Marker position={[location.lat, location.lon]} />
-                <RecenterMap lat={location.lat} lon={location.lon} />
+                {/* Pass forceMapUpdate here */}
+                <RecenterMap lat={location.lat} lon={location.lon} forceUpdate={forceMapUpdate} />
               </MapContainer>
             ) : (
               <div className="flex items-center justify-center h-full text-gray-400">
