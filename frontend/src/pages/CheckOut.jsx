@@ -7,12 +7,11 @@ import axios from 'axios';
 import 'leaflet/dist/leaflet.css'; // Import it right here
 
 // Redux Actions
-import  clearCart  from '../redux/user.Slice'; 
+import clearCart from '../redux/user.Slice'; 
 import { setLocation, setAddress } from '../redux/mapSlice';
 
 // Leaflet Imports
 import { MapContainer, TileLayer, Marker, useMap } from 'react-leaflet';
-import 'leaflet/dist/leaflet.css';
 import L from 'leaflet';
 
 // Fix for Leaflet default icon issue in React
@@ -59,8 +58,9 @@ const CheckOut = () => {
     if (currentAddress) setDeliveryAddress(currentAddress);
   }, [currentAddress]);
 
+  // Dynamic Delivery Fee Logic: Free if subtotal is >= 500
   const subtotal = cartItem.reduce((acc, item) => acc + item.price * item.quantity, 0);
-  const deliveryFee = 40; 
+  const deliveryFee = subtotal >= 500 ? 0 : 40; 
   const total = subtotal + deliveryFee;
 
   const handleSearchAddress = async () => {
@@ -236,7 +236,9 @@ const CheckOut = () => {
             </div>
             <div className="flex justify-between">
               <span className="text-gray-500">Delivery Fee</span>
-              <span className="font-bold">₹{deliveryFee}</span>
+              <span className="font-bold text-green-600">
+                {deliveryFee === 0 ? "FREE" : `₹${deliveryFee}`}
+              </span>
             </div>
           </div>
           <div className="flex justify-between mt-4">
@@ -245,12 +247,19 @@ const CheckOut = () => {
           </div>
         </div>
 
+        {/* Dynamic Action Button text depending on payment selection */}
         <button 
           onClick={handlePlaceOrder}
           disabled={loading}
           className="w-full bg-[#ff4d2d] text-white py-4 rounded-2xl font-bold shadow-lg active:scale-95 transition-all disabled:bg-gray-400"
         >
-          {loading ? "Processing Order..." : "Place Order"}
+          {loading ? (
+            "Processing Order..."
+          ) : paymentMethod === 'Online' ? (
+            "Pay and Place Order"
+          ) : (
+            "Place Order"
+          )}
         </button>
       </div>
     </div>
