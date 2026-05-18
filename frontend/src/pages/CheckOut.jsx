@@ -58,9 +58,15 @@ const CheckOut = () => {
     if (currentAddress) setDeliveryAddress(currentAddress);
   }, [currentAddress]);
 
-  // Dynamic Delivery Fee Logic: Free if subtotal is >= 500
+  // --- MULTI-SHOP DYNAMIC DELIVERY FEE CALCULATIONS ---
   const subtotal = cartItem.reduce((acc, item) => acc + item.price * item.quantity, 0);
-  const deliveryFee = subtotal >= 500 ? 0 : 40; 
+  
+  // Extract all unique shops present in the user's cart list
+  const uniqueShops = [...new Set(cartItem.map(item => item.shop || item.shopId).filter(Boolean))];
+  const totalShopsCount = uniqueShops.length > 0 ? uniqueShops.length : 1;
+  
+  // Flat standard fee of ₹40 applied to every unique restaurant branch visited
+  const deliveryFee = totalShopsCount * 40; 
   const total = subtotal + deliveryFee;
 
   const handleSearchAddress = async () => {
@@ -102,12 +108,19 @@ const CheckOut = () => {
 
   const handlePlaceOrder = async () => {
     if (!deliveryAddress?.trim()) return toast.error("Please provide a delivery address");
+    if (!location.lat || !location.lon) {
+      return toast.error("Please locate and pin your address on the map before proceeding.");
+    }
 
     setLoading(true);
     try {
       const orderData = {
         paymentMethod,
-        deliveryAddress: { text: deliveryAddress },
+        deliveryAddress: { 
+          text: deliveryAddress,
+          lat: location.lat,
+          lon: location.lon
+        },
         items: cartItem.map(item => ({ product: item._id, quantity: item.quantity })),
         totalAmount: total
       };
@@ -115,9 +128,11 @@ const CheckOut = () => {
       const response = await axios.post('http://localhost:8000/api/orders/place', orderData, { withCredentials: true });
 
       if (response.data.success) {
-        toast.success("Order Placed Successfully!");
+        toast.success(response.data.message || "Order Placed Successfully!");
         dispatch(clearCart());
-        navigate('/home');
+        
+        // Safely pass down split items collection arrays to the order success routing view state
+        navigate('/order-placed', { state: { orders: response.data.orders } });
       }
     } catch (error) {
       toast.error(error.response?.data?.message || "Order failed");
@@ -235,9 +250,11 @@ const CheckOut = () => {
               <span className="font-bold">₹{subtotal}</span>
             </div>
             <div className="flex justify-between">
-              <span className="text-gray-500">Delivery Fee</span>
+              <span className="text-gray-500">
+                Delivery Fee {totalShopsCount > 1 && `(${totalShopsCount} Shops)`}
+              </span>
               <span className="font-bold text-green-600">
-                {deliveryFee === 0 ? "FREE" : `₹${deliveryFee}`}
+                ₹{deliveryFee}
               </span>
             </div>
           </div>

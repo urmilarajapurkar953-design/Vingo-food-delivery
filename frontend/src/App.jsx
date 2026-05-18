@@ -16,6 +16,7 @@ import AddItem from './pages/AddItem'
 import EditItem from './pages/EditItem'
 import Cart from './pages/Cart'
 import CheckOut from './pages/CheckOut'
+import OrderPlaced from './pages/OrderPlaced'
 
 export const serverUrl = 'http://localhost:8000'
 
@@ -51,6 +52,8 @@ const { userData } = useSelector((state) => state.user || {});
         <Route path="/forgot-password" element={<ForgotPassword />} />
         <Route path="/cart" element={<Cart />} />
         <Route path="/checkout" element={userData ? <CheckOut /> : <Navigate to="/signin" />} />
+        <Route path="/order-placed" element={userData ? <OrderPlaced /> : <Navigate to="/signin" />} />
+
 
 
 
