@@ -46,18 +46,25 @@ const userSlice = createSlice({
       state.cartItem = state.cartItem.filter((item) => item._id !== action.payload);
       localStorage.setItem("cartItem", JSON.stringify(state.cartItem));
     },
+
+    // UPDATED: Added clearCart reducer to prevent frontend app crash during checkout
+    clearCart: (state) => {
+      state.cartItem = [];
+      localStorage.removeItem("cartItem");
+    }
   },
 });
 
-// 3. THIS IS THE CRITICAL PART: Every name here must match your imports
+// 3. Destructuring and exporting actions securely
 export const {
   setUserData,
   setCurrentCity,
   setCurrentState,
-  setCurrentAddress, // This was likely missing or misspelled
+  setCurrentAddress, 
   addToCart,
   decrementQuantity,
-  removeFromCart
+  removeFromCart,
+  clearCart // UPDATED: Exported clearCart action handler here
 } = userSlice.actions;
 
 export default userSlice.reducer;

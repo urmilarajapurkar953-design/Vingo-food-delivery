@@ -9,6 +9,8 @@ import userRouter from './routes/user.routes.js';
 import authRouter from "./routes/auth.routes.js";
 import shopRouter from "./routes/shop.routes.js";
 import itemRouter from "./routes/item.routes.js";
+import orderRouter from "./routes/order.routes.js"; // 1. IMPORTED ORDER ROUTER HERE
+
 
 const app = express();
 
@@ -24,6 +26,8 @@ app.use(cookieParser());
 app.use("/api/auth", authRouter);
 app.use("/api/user", userRouter);
 app.use("/api/item", itemRouter);
+app.use("/api/orders", orderRouter); // 2. ADDED ORDER ROUTER HERE
+
 
 // UPDATED: Added /v1/shops to match your Frontend request
 app.use("/api/v1/shops", shopRouter); 

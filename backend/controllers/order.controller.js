@@ -1,13 +1,11 @@
-import Order from "../models/order.model.js"; // Adjust paths to match your project
-import Product from "../models/product.model.js"; 
-import mongoose from "mongoose";
+import Order from "../models/order.model.js"; 
+import Item from "../models/item.model.js";
 
 export const placeOrder = async (req, res) => {
   try {
     const { items, paymentMethod, deliveryAddress, totalAmount } = req.body;
-    const userId = req.user?._id; // Assuming you have user authentication middleware
+    const userId = req.user?._id; 
 
-    // 1. STAGE ONE: Validate all required fields (including coordinates)
     if (!items || items.length === 0) {
       return res.status(400).json({ success: false, message: "Cart is empty" });
     }
@@ -18,41 +16,36 @@ export const placeOrder = async (req, res) => {
       return res.status(400).json({ success: false, message: "Delivery text address is required" });
     }
     
-    // Check if map coordinates are present
     const { lat, lon } = deliveryAddress;
     if (lat === undefined || lon === undefined || lat === null || lon === null) {
       return res.status(400).json({ 
         success: false, 
-        message: "Delivery location coordinates (Latitude and Longitude) are missing." 
+        message: "Delivery location coordinates are missing." 
       });
     }
 
-    // 2. STAGE TWO: Fetch full product details to verify shops and calculate pricing safely
+    // Fetch full item details to group them by shop
     const productIds = items.map(item => item.product);
-    const databaseProducts = await Product.find({ _id: { $in: productIds } });
+    const databaseItems = await Item.find({ _id: { $in: productIds } });
 
-    // Build a quick lookup map for full product data
-    const productMap = {};
-    databaseProducts.forEach(prod => {
-      productMap[prod._id.toString()] = prod;
+    const itemMap = {};
+    databaseItems.forEach(item => {
+      itemMap[item._id.toString()] = item;
     });
 
-    // 3. STAGE THREE: Group items by their respective Shop ID
     const groupedByShop = {};
 
-    items.forEach(item => {
-      const fullProductDetails = productMap[item.product.toString()];
+    items.forEach(cartItem => {
+      const fullItemDetails = itemMap[cartItem.product.toString()];
       
-      if (!fullProductDetails) {
-        throw new Error(`Product with ID ${item.product} no longer exists.`);
+      if (!fullItemDetails) {
+        throw new Error(`Product with ID ${cartItem.product} no longer exists.`);
       }
 
-      // Identify which shop owns this product
-      // Adjust property name ('shop', 'shopId', or 'restaurant') based on your Product Schema
-      const shopId = fullProductDetails.shop?.toString() || fullProductDetails.shopId?.toString();
+      const shopId = fullItemDetails.shop?.toString();
       
       if (!shopId) {
-        throw new Error(`Product ${fullProductDetails.name} is not linked to any shop.`);
+        throw new Error(`Product "${fullItemDetails.name}" is not cleanly linked to a shop.`);
       }
 
       if (!groupedByShop[shopId]) {
@@ -60,58 +53,67 @@ export const placeOrder = async (req, res) => {
       }
 
       groupedByShop[shopId].push({
-        product: item.product,
-        quantity: item.quantity,
-        priceAtOrder: fullProductDetails.price, // Store historical price
-        name: fullProductDetails.name
+        item: cartItem.product,
+        quantity: cartItem.quantity,
+        price: fullItemDetails.price 
       });
     });
 
-    // 4. STAGE FOUR: Generate individual database orders for each distinct shop group
-    const createdOrders = [];
-    const sharedGroupId = new mongoose.Types.ObjectId(); // Connects the separated orders under one checkout session if needed
+    const shopOrdersPayload = [];
 
     for (const shopId in groupedByShop) {
-      const shopItems = groupedByShop[shopId];
-      
-      // Calculate split totals dynamically from verified database values
-      const shopSubtotal = shopItems.reduce((acc, currentItem) => {
-        return acc + (currentItem.priceAtOrder * currentItem.quantity);
-      }, 0);
+      const shopOrderItems = groupedByShop[shopId];
+      const shopSubtotal = shopOrderItems.reduce((sum, item) => sum + (item.price * item.quantity), 0);
 
-      // You can divide your base delivery fee across shops or assign it to the first one
-      const assignedDeliveryFee = 40 / Object.keys(groupedByShop).length; 
-
-      const newOrder = new Order({
-        user: userId,
-        shop: shopId, // The specific vendor receiving this order segment
-        items: shopItems.map(si => ({ product: si.product, quantity: si.quantity })),
-        subtotalAmount: shopSubtotal,
-        deliveryFee: assignedDeliveryFee,
-        totalAmount: shopSubtotal + assignedDeliveryFee,
-        paymentMethod,
-        deliveryAddress: {
-          text: deliveryAddress.text,
-          lat: Number(lat),
-          lon: Number(lon)
-        },
-        checkoutGroupId: sharedGroupId, // Handy for lookups matching these split orders later
-        status: "Pending"
+      shopOrdersPayload.push({
+        shop: shopId,
+        owner: userId, 
+        subTotal: shopSubtotal,
+        shopOrderItems: shopOrderItems
       });
-
-      const savedOrder = await newOrder.save();
-      createdOrders.push(savedOrder);
     }
 
-    // 5. STAGE FIVE: Return clean unified success status back to frontend
+    // Instantiate master order document matching your schema rules perfectly
+    const unifiedOrder = new Order({
+      user: userId,
+      paymentMethod,
+      deliveryAddress: {
+        text: deliveryAddress.text,
+        lat: Number(lat),  // KEPT: Using lat natively as requested
+        lon: Number(lon)   // KEPT: Using lon natively as requested
+      },
+      shopOrders: shopOrdersPayload, 
+      items: items.map(item => ({ product: item.product, quantity: item.quantity })), 
+      totalAmount: Number(totalAmount)
+    });
+
+    const savedOrder = await unifiedOrder.save();
+
+    // CRITICAL UPDATE: Deep populate the document details right before responding to the client
+    const fullyPopulatedOrder = await Order.findById(savedOrder._id)
+      .populate({
+        path: 'shopOrders',
+        populate: [
+          { 
+            path: 'shop', 
+            select: 'name image' // Fetches exact shop names & images from your Shop collection
+          },
+          { 
+            path: 'shopOrderItems.item', 
+            select: 'name price' // Fetches exact item names for itemized breakdown lists
+          }
+        ]
+      });
+
+    // Passing the fully loaded order document configuration to the frontend
     return res.status(201).json({
       success: true,
-      message: `Your order was split and placed successfully across ${createdOrders.length} shops!`,
-      orders: createdOrders
+      message: "Order placed successfully!",
+      orders: [fullyPopulatedOrder] 
     });
 
   } catch (error) {
-    console.error("Order Splitting Error:", error);
+    console.error("Order processing error:", error);
     return res.status(500).json({
       success: false,
       message: error.message || "Internal server error while placing order."

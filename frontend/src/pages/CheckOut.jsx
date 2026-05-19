@@ -7,7 +7,7 @@ import axios from 'axios';
 import 'leaflet/dist/leaflet.css'; // Import it right here
 
 // Redux Actions
-import clearCart from '../redux/user.Slice'; 
+import {clearCart} from '../redux/user.Slice'; 
 import { setLocation, setAddress } from '../redux/mapSlice';
 
 // Leaflet Imports

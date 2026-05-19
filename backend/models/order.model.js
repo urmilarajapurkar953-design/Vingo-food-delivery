@@ -14,7 +14,7 @@ const shopOrderItemSchema = new mongoose.Schema({
     quantity: {
         type: Number,
         required: true,
-        min: 1 // Added min to ensure valid orders
+        min: 1 
     }
 }, {
     timestamps: true
@@ -51,19 +51,19 @@ const orderSchema = new mongoose.Schema({
     paymentMethod: {
         type: String,
         required: true,
-        enum: ["COD", "Online"] // Fixed typo from 'anum'
+        enum: ["COD", "Online"] 
     },
     deliveryAddress: {
-        text: String, // Changed 'Text' to lowercase 'text' (Standard practice)
-        latitude: Number,
-        longitude: Number
+        text: String, 
+        lat: Number, // FIXED: Reverted back to lat to match your frontend tracking map
+        lon: Number  // FIXED: Reverted back to lon to match your frontend tracking map
     },
-    shopOrders: [shopOrderSchema], // Renamed to plural for clarity
+    shopOrders: [shopOrderSchema], 
     items: [
         {
             product: {
                 type: mongoose.Schema.Types.ObjectId,
-                ref: "Product",
+                ref: "Item", // FIXED: Changed "Product" to "Item" so population handles smoothly
                 required: true
             },
             quantity: {
@@ -77,12 +77,9 @@ const orderSchema = new mongoose.Schema({
         type: Number,
         required: true
     }
-    // Removed the duplicate 'totalAmount' key from here
 }, {
     timestamps: true
 });
 
-// Exporting the model
- const Order = mongoose.model("Order", orderSchema);
-
+const Order = mongoose.models.Order || mongoose.model("Order", orderSchema);
 export default Order;
