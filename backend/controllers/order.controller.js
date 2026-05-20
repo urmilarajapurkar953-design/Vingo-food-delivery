@@ -1,6 +1,7 @@
 import Order from "../models/order.model.js"; 
 import Item from "../models/item.model.js";
 
+// KEPT UNCHANGED: Your exact order placement function
 export const placeOrder = async (req, res) => {
   try {
     const { items, paymentMethod, deliveryAddress, totalAmount } = req.body;
@@ -79,8 +80,8 @@ export const placeOrder = async (req, res) => {
       paymentMethod,
       deliveryAddress: {
         text: deliveryAddress.text,
-        lat: Number(lat),  // KEPT: Using lat natively as requested
-        lon: Number(lon)   // KEPT: Using lon natively as requested
+        lat: Number(lat),  
+        lon: Number(lon)   
       },
       shopOrders: shopOrdersPayload, 
       items: items.map(item => ({ product: item.product, quantity: item.quantity })), 
@@ -96,16 +97,15 @@ export const placeOrder = async (req, res) => {
         populate: [
           { 
             path: 'shop', 
-            select: 'name image' // Fetches exact shop names & images from your Shop collection
+            select: 'name image' 
           },
           { 
             path: 'shopOrderItems.item', 
-            select: 'name price' // Fetches exact item names for itemized breakdown lists
+            select: 'name price' 
           }
         ]
       });
 
-    // Passing the fully loaded order document configuration to the frontend
     return res.status(201).json({
       success: true,
       message: "Order placed successfully!",
@@ -118,5 +118,103 @@ export const placeOrder = async (req, res) => {
       success: false,
       message: error.message || "Internal server error while placing order."
     });
+  }
+};
+
+// ADDED: Fetch order history for the active customer
+export const getUserOrders = async (req, res) => {
+  try {
+    const userId = req.user?._id;
+    const orders = await Order.find({ user: userId })
+      .populate({
+        path: "shopOrders",
+        populate: [
+          { path: "shop", select: "name image" },
+          { path: "shopOrderItems.item", select: "name image price" }
+        ]
+      })
+      .sort({ createdAt: -1 });
+
+    return res.status(200).json({ success: true, orders });
+  } catch (error) {
+    return res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+// ADDED: Fetch shop metrics specific only to the matching shop owner field
+export const getOwnerShopOrders = async (req, res) => {
+  try {
+    const ownerId = req.user?._id;
+
+    // Find master orders that contain nested items assigned to this owner's sub-profile
+    const orders = await Order.find({ "shopOrders.owner": ownerId })
+      .populate("user", "name email phone")
+      .populate({
+        path: "shopOrders",
+        populate: [
+          { path: "shop", select: "name image" },
+          { path: "shopOrderItems.item", select: "name image price" }
+        ]
+      });
+
+    const structuredOrders = [];
+    orders.forEach((masterOrder) => {
+      masterOrder.shopOrders.forEach((subOrder) => {
+        // Isolate so the shop owner only receives data updates tailored to their shop profile
+        if (subOrder.owner?.toString() === ownerId.toString()) {
+          structuredOrders.push({
+            masterOrderId: masterOrder._id,
+            subOrderId: subOrder._id,
+            customer: masterOrder.user,
+            deliveryAddress: masterOrder.deliveryAddress,
+            paymentMethod: masterOrder.paymentMethod,
+            status: subOrder.status || "Pending",
+            shop: subOrder.shop,
+            items: subOrder.shopOrderItems,
+            subTotal: subOrder.subTotal,
+            createdAt: masterOrder.createdAt
+          });
+        }
+      });
+    });
+
+    structuredOrders.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+    return res.status(200).json({ success: true, orders: structuredOrders });
+  } catch (error) {
+    return res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+// ADDED: Handle dropdown status shifts and dispatch WebSocket event notifications
+export const updateSubOrderStatus = async (req, res) => {
+  try {
+    const { masterOrderId, subOrderId, status } = req.body;
+    
+    const masterOrder = await Order.findById(masterOrderId);
+    if (!masterOrder) {
+      return res.status(404).json({ success: false, message: "Master Order structural block missing." });
+    }
+
+    const subOrder = masterOrder.shopOrders.id(subOrderId);
+    if (!subOrder) {
+      return res.status(404).json({ success: false, message: "Sub order reference missing." });
+    }
+
+    subOrder.status = status;
+    await masterOrder.save();
+
+    // Fire real-time web dispatch message stream down to specific client room channel
+    const io = req.app.get("io");
+    if (io) {
+      io.to(masterOrder.user.toString()).emit("orderStatusUpdated", {
+        masterOrderId: masterOrder._id,
+        subOrderId: subOrder._id,
+        newStatus: status
+      });
+    }
+
+    return res.status(200).json({ success: true, message: "Status synchronized successfully", status });
+  } catch (error) {
+    return res.status(500).json({ success: false, message: error.message });
   }
 };

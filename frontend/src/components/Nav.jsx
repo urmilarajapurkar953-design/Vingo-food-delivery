@@ -84,6 +84,15 @@ function Nav() {
         {/* User Specific Actions */}
         {!isOwner && (
           <>
+            {/* ADDED: Order History Button for Desktop View Screens */}
+            <button 
+              onClick={() => navigate('/my-orders')}
+              className='hidden sm:flex items-center gap-2 text-gray-700 hover:text-[#ff4d2d] transition-all font-semibold text-sm group'
+            >
+              <LuLayoutList size={20} className='group-hover:scale-110 transition-transform' />
+              <span>Track Orders</span>
+            </button>
+
             <button className='md:hidden p-2 text-gray-600' onClick={() => setIsMobileSearchOpen(true)}>
               <IoIosSearch size={26} />
             </button>
@@ -115,7 +124,11 @@ function Nav() {
                   <span className='hidden sm:inline'>Add Item</span>
                 </button>
 
-                <button className='relative flex items-center gap-2 text-gray-700 hover:text-[#ff4d2d] transition-all font-semibold text-sm group'>
+                {/* UPDATED: Appended active navigation route linking to Owner Dashboard page */}
+                <button 
+                  onClick={() => navigate('/dashboard/orders')}
+                  className='relative flex items-center gap-2 text-gray-700 hover:text-[#ff4d2d] transition-all font-semibold text-sm group'
+                >
                   <div className='relative'>
                     <LuLayoutList size={22} className='group-hover:scale-110 transition-transform' />
                     <span className='absolute -top-2 -right-2 bg-[#ff4d2d] text-white text-[10px] w-4 h-4 rounded-full flex items-center justify-center font-bold border-2 border-[#fff9f6]'>
@@ -145,6 +158,27 @@ function Nav() {
                   <span className='text-gray-800 font-bold text-sm truncate'>{userData?.fullName}</span>
                 </div>
                 <div className='h-[1px] bg-gray-100 w-full'></div>
+                
+                {/* --- RESPONSIVE DROPDOWN LINK INCLUSIONS --- */}
+                {!isOwner && (
+                  <button 
+                    onClick={() => { navigate('/my-orders'); setShowInfo(false); }}
+                    className='sm:hidden text-gray-700 font-bold text-sm text-left hover:bg-orange-50 p-2 rounded-lg transition-colors'
+                  >
+                    Track Orders
+                  </button>
+                )}
+                
+                {isOwner && myShopData && (
+                  <button 
+                    onClick={() => { navigate('/dashboard/orders'); setShowInfo(false); }}
+                    className='sm:hidden text-gray-700 font-bold text-sm text-left hover:bg-orange-50 p-2 rounded-lg transition-colors'
+                  >
+                    My Orders
+                  </button>
+                )}
+                {/* ------------------------------------------- */}
+
                 <button 
                   className='text-[#ff4d2d] font-bold text-sm text-left hover:bg-orange-50 p-2 rounded-lg transition-colors' 
                   onClick={handleLogout}

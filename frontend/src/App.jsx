@@ -17,14 +17,19 @@ import EditItem from './pages/EditItem';
 import Cart from './pages/Cart';
 import CheckOut from './pages/CheckOut';
 import OrderPlaced from './pages/OrderPlaced'; 
+import UserOrderPage from './pages/UserOrderPage';
+import OwnerOrderPage from './pages/OwnerOrderPage';
+
 export const serverUrl = 'http://localhost:8000';
 
 function App() {
   const location = useLocation();
-  const hideNavPaths = ['/create-edit-shop', '/checkout', '/order-placed'];
+  const hideNavPaths = ['/create-edit-shop', '/checkout', '/order-placed', '/my-orders', '/dashboard/orders'];
   useGetCurrentUser(); 
   useGetCity();
   useGetMyShop();
+  
+  // Your user data profile is extracted here as 'userData'
   const { userData } = useSelector((state) => state.user || {});
 
   return (
@@ -52,6 +57,10 @@ function App() {
         <Route path="/cart" element={<Cart />} />
         <Route path="/checkout" element={userData ? <CheckOut /> : <Navigate to="/signin" />} />
         <Route path="/order-placed" element={userData ? <OrderPlaced /> : <Navigate to="/signin" />} />
+        
+        {/* FIXED: Replaced 'currentUser' with 'userData' so it references your active Redux state */}
+        <Route path="/my-orders" element={userData ? <UserOrderPage currentUser={userData} /> : <Navigate to="/signin" />} />
+        <Route path="/dashboard/orders" element={userData ? <OwnerOrderPage /> : <Navigate to="/signin" />} />
 
         <Route path="*" element={<div>404 - Not Found</div>} />
       </Routes>
