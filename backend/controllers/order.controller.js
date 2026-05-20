@@ -1,7 +1,7 @@
 import Order from "../models/order.model.js"; 
 import Item from "../models/item.model.js";
+import Shop from "../models/shop.model.js"; 
 
-// KEPT UNCHANGED: Your exact order placement function
 export const placeOrder = async (req, res) => {
   try {
     const { items, paymentMethod, deliveryAddress, totalAmount } = req.body;
@@ -25,7 +25,6 @@ export const placeOrder = async (req, res) => {
       });
     }
 
-    // Fetch full item details to group them by shop
     const productIds = items.map(item => item.product);
     const databaseItems = await Item.find({ _id: { $in: productIds } });
 
@@ -55,8 +54,8 @@ export const placeOrder = async (req, res) => {
 
       groupedByShop[shopId].push({
         item: cartItem.product,
-        quantity: cartItem.quantity,
-        price: fullItemDetails.price 
+        price: fullItemDetails.price,
+        quantity: cartItem.quantity
       });
     });
 
@@ -66,17 +65,38 @@ export const placeOrder = async (req, res) => {
       const shopOrderItems = groupedByShop[shopId];
       const shopSubtotal = shopOrderItems.reduce((sum, item) => sum + (item.price * item.quantity), 0);
 
+      const activeShopRecord = await Shop.findById(shopId);
+      
+      if (!activeShopRecord) {
+        return res.status(404).json({ 
+          success: false, 
+          message: `The shop listing with ID ${shopId} could not be located.` 
+        });
+      }
+
+      const trueShopOwnerId = activeShopRecord.owner;
+
+      if (!trueShopOwnerId) {
+        return res.status(400).json({ 
+          success: false, 
+          message: `The shop "${activeShopRecord.name}" is missing a registered owner value.` 
+        });
+      }
+
       shopOrdersPayload.push({
         shop: shopId,
-        owner: userId, 
+        owner: trueShopOwnerId, 
         subTotal: shopSubtotal,
-        shopOrderItems: shopOrderItems
+        shopOrderItems: shopOrderItems.map(oi => ({
+          item: oi.item,
+          price: oi.price,
+          quantity: oi.quantity
+        }))
       });
     }
 
-    // Instantiate master order document matching your schema rules perfectly
     const unifiedOrder = new Order({
-      user: userId,
+      user: userId, 
       paymentMethod,
       deliveryAddress: {
         text: deliveryAddress.text,
@@ -90,21 +110,41 @@ export const placeOrder = async (req, res) => {
 
     const savedOrder = await unifiedOrder.save();
 
-    // CRITICAL UPDATE: Deep populate the document details right before responding to the client
+    // FIXED: Populating directly on the saved main schema array elements smoothly
     const fullyPopulatedOrder = await Order.findById(savedOrder._id)
+      .populate("user", "fullName name email phone")
       .populate({
-        path: 'shopOrders',
-        populate: [
-          { 
-            path: 'shop', 
-            select: 'name image' 
-          },
-          { 
-            path: 'shopOrderItems.item', 
-            select: 'name price' 
-          }
-        ]
+        path: 'shopOrders.shop',
+        select: 'name image text'
+      })
+      .populate({
+        path: 'shopOrders.shopOrderItems.item',
+        select: 'name price image'
       });
+
+    // 🚀 LIVE REAL-TIME DISPATCH: Alerts owner endpoints immediately
+    const io = req.app.get("io");
+    if (io && fullyPopulatedOrder) {
+      fullyPopulatedOrder.shopOrders.forEach(subOrder => {
+        // Access raw schema reference value to prevent structural data loss 
+        const targetOwnerId = shopOrdersPayload.find(p => p.shop === subOrder.shop._id.toString())?.owner;
+        
+        if (targetOwnerId) {
+          io.to(targetOwnerId.toString()).emit("newOrderReceived", {
+            masterOrderId: fullyPopulatedOrder._id,
+            subOrderId: subOrder._id,
+            customer: fullyPopulatedOrder.user,
+            deliveryAddress: fullyPopulatedOrder.deliveryAddress,
+            paymentMethod: fullyPopulatedOrder.paymentMethod,
+            status: subOrder.status || "Pending",
+            shop: subOrder.shop,
+            items: subOrder.shopOrderItems,
+            subTotal: subOrder.subTotal,
+            createdAt: fullyPopulatedOrder.createdAt
+          });
+        }
+      });
+    }
 
     return res.status(201).json({
       success: true,
@@ -121,17 +161,17 @@ export const placeOrder = async (req, res) => {
   }
 };
 
-// ADDED: Fetch order history for the active customer
 export const getUserOrders = async (req, res) => {
   try {
     const userId = req.user?._id;
     const orders = await Order.find({ user: userId })
       .populate({
-        path: "shopOrders",
-        populate: [
-          { path: "shop", select: "name image" },
-          { path: "shopOrderItems.item", select: "name image price" }
-        ]
+        path: "shopOrders.shop",
+        select: "name image"
+      })
+      .populate({
+        path: "shopOrders.shopOrderItems.item",
+        select: "name image price"
       })
       .sort({ createdAt: -1 });
 
@@ -141,27 +181,26 @@ export const getUserOrders = async (req, res) => {
   }
 };
 
-// ADDED: Fetch shop metrics specific only to the matching shop owner field
 export const getOwnerShopOrders = async (req, res) => {
   try {
     const ownerId = req.user?._id;
 
-    // Find master orders that contain nested items assigned to this owner's sub-profile
     const orders = await Order.find({ "shopOrders.owner": ownerId })
-      .populate("user", "name email phone")
+      .populate("user", "fullName name email phone")
       .populate({
-        path: "shopOrders",
-        populate: [
-          { path: "shop", select: "name image" },
-          { path: "shopOrderItems.item", select: "name image price" }
-        ]
+        path: "shopOrders.shop",
+        select: "name image"
+      })
+      .populate({
+        path: "shopOrders.shopOrderItems.item",
+        select: "name image price"
       });
 
     const structuredOrders = [];
     orders.forEach((masterOrder) => {
       masterOrder.shopOrders.forEach((subOrder) => {
-        // Isolate so the shop owner only receives data updates tailored to their shop profile
-        if (subOrder.owner?.toString() === ownerId.toString()) {
+        // FIXED: Explicitly target structural sub-order document variables
+        if (subOrder.owner && subOrder.owner.toString() === ownerId.toString()) {
           structuredOrders.push({
             masterOrderId: masterOrder._id,
             subOrderId: subOrder._id,
@@ -185,36 +224,48 @@ export const getOwnerShopOrders = async (req, res) => {
   }
 };
 
-// ADDED: Handle dropdown status shifts and dispatch WebSocket event notifications
 export const updateSubOrderStatus = async (req, res) => {
   try {
     const { masterOrderId, subOrderId, status } = req.body;
     
-    const masterOrder = await Order.findById(masterOrderId);
-    if (!masterOrder) {
-      return res.status(404).json({ success: false, message: "Master Order structural block missing." });
+    console.log("------------------ STATUS UPDATE START ------------------");
+    console.log("Raw incoming payload fields:", { masterOrderId, subOrderId, status });
+
+    const updatedMasterOrder = await Order.findOneAndUpdate(
+      { 
+        _id: masterOrderId, 
+        "shopOrders._id": subOrderId 
+      },
+      { 
+        $set: { "shopOrders.$.status": status } 
+      },
+      { returnDocument: 'after' } 
+    );
+
+    if (!updatedMasterOrder) {
+      console.error(`❌ DATABASE FAILED: Could not find Master Order (${masterOrderId}) containing subOrderId (${subOrderId})`);
+      return res.status(404).json({ success: false, message: "Order element not found." });
     }
 
-    const subOrder = masterOrder.shopOrders.id(subOrderId);
-    if (!subOrder) {
-      return res.status(404).json({ success: false, message: "Sub order reference missing." });
-    }
+    console.log("✅ DATABASE SAVED: Target array node modified cleanly!");
 
-    subOrder.status = status;
-    await masterOrder.save();
-
-    // Fire real-time web dispatch message stream down to specific client room channel
     const io = req.app.get("io");
     if (io) {
-      io.to(masterOrder.user.toString()).emit("orderStatusUpdated", {
-        masterOrderId: masterOrder._id,
-        subOrderId: subOrder._id,
+      io.to(updatedMasterOrder.user.toString()).emit("orderStatusUpdated", {
+        masterOrderId: updatedMasterOrder._id,
+        subOrderId: subOrderId,
         newStatus: status
       });
     }
 
-    return res.status(200).json({ success: true, message: "Status synchronized successfully", status });
+    return res.status(200).json({ 
+      success: true, 
+      message: "Status successfully updated in DB and pushed live!", 
+      status: status 
+    });
+
   } catch (error) {
+    console.error("💥 SYSTEM ERROR inside updateSubOrderStatus controller:", error);
     return res.status(500).json({ success: false, message: error.message });
   }
 };

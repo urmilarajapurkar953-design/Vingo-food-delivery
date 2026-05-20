@@ -7,9 +7,11 @@ const orderRouter = express.Router();
 // KEPT UNCHANGED: Your baseline order placement route endpoint
 orderRouter.post("/place", isAuth, placeOrder);
 
-// ADDED: Endpoints for user-history matching and owner system status pipelines
+// Endpoints for user-history matching and owner system status pipelines
 orderRouter.get("/user-history", isAuth, getUserOrders);
 orderRouter.get("/owner-dashboard", isAuth, getOwnerShopOrders);
+
+// Handled via atomic updates and internal WebSocket pushes
 orderRouter.put("/update-status", isAuth, updateSubOrderStatus);
 
 export default orderRouter;

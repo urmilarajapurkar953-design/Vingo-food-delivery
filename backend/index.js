@@ -3,8 +3,8 @@ dotenv.config();
 import express from "express";
 import cors from "cors";
 import cookieParser from "cookie-parser";
-import http from "http"; // ADDED: Built-in node HTTP module
-import { Server } from "socket.io"; // ADDED: Socket.io library
+import http from "http"; 
+import { Server } from "socket.io"; 
 
 import connectDB from "./config/db.js";
 import userRouter from './routes/user.routes.js';
@@ -15,7 +15,6 @@ import orderRouter from "./routes/order.routes.js";
 
 const app = express();
 
-// ADDED: Create HTTP server wrapper and attach Socket.io
 const server = http.createServer(app);
 const io = new Server(server, {
     cors: {
@@ -25,11 +24,16 @@ const io = new Server(server, {
     }
 });
 
-// ADDED: Share io instance globally to make it accessible inside controllers
 app.set("io", io);
 
-// ADDED: Real-time user session rooms configuration
 io.on("connection", (socket) => {
+    // STANDARDIZED: Handles both users and owners checking into their secure ID channel spaces
+    socket.on("joinRoom", (id) => {
+        socket.join(id);
+        console.log(`Socket entity registered inside channel: ${id}`);
+    });
+    
+    // Kept fallback for old reference if components trigger it
     socket.on("joinUserRoom", (userId) => {
         socket.join(userId);
         console.log(`User registered inside real-time notification room: ${userId}`);
@@ -53,13 +57,10 @@ app.use("/api/auth", authRouter);
 app.use("/api/user", userRouter);
 app.use("/api/item", itemRouter);
 app.use("/api/orders", orderRouter); 
-
-// UPDATED: Added /v1/shops to match your Frontend request
 app.use("/api/v1/shops", shopRouter); 
 
 const PORT = process.env.PORT || 8000; 
 
-// UPDATED: Standardized server instance handler wrapper
 server.listen(PORT, () => {
     connectDB();
     console.log(`Server is running on port ${PORT}`);

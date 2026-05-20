@@ -9,10 +9,15 @@ import axios from 'axios';
 import { setUserData } from '../redux/user.Slice'; 
 import { serverUrl } from '../App'; 
 
+// Import custom hook link
+import { useSocket } from '../context/SocketContext';
+
 function Nav() {
-  // Added cartItem to the selector
   const { userData, currentCity, currentAddress, cartItem } = useSelector((state) => state.user);
   const { myShopData } = useSelector((state) => state.owner);
+  
+  // Wire live navigation metrics counters
+  const { ownerBadgeCount, userBadgeCount } = useSocket();
   
   const [showInfo, setShowInfo] = useState(false);
   const [isMobileSearchOpen, setIsMobileSearchOpen] = useState(false); 
@@ -20,7 +25,6 @@ function Nav() {
   const dispatch = useDispatch(); 
   const navigate = useNavigate();
 
-  // Calculate total quantity of all items in cart
   const totalCartItems = cartItem?.reduce((acc, item) => acc + item.quantity, 0) || 0;
 
   const handleLogout = async () => {
@@ -84,19 +88,25 @@ function Nav() {
         {/* User Specific Actions */}
         {!isOwner && (
           <>
-            {/* ADDED: Order History Button for Desktop View Screens */}
             <button 
               onClick={() => navigate('/my-orders')}
-              className='hidden sm:flex items-center gap-2 text-gray-700 hover:text-[#ff4d2d] transition-all font-semibold text-sm group'
+              className='relative hidden sm:flex items-center gap-2 text-gray-700 hover:text-[#ff4d2d] transition-all font-semibold text-sm group'
             >
-              <LuLayoutList size={20} className='group-hover:scale-110 transition-transform' />
+              <div className='relative flex items-center gap-2'>
+                <LuLayoutList size={20} className='group-hover:scale-110 transition-transform' />
+                {userBadgeCount > 0 && (
+                  <span className='absolute -top-2 -left-2 bg-[#ff4d2d] text-white text-[10px] w-4 h-4 rounded-full flex items-center justify-center font-bold border-2 border-[#fff9f6] animate-pulse'>
+                    {userBadgeCount}
+                  </span>
+                )}
+              </div>
               <span>Track Orders</span>
             </button>
 
             <button className='md:hidden p-2 text-gray-600' onClick={() => setIsMobileSearchOpen(true)}>
               <IoIosSearch size={26} />
             </button>
-            {/* Added onClick navigate and dynamic count badge */}
+            
             <div 
               className='relative cursor-pointer text-gray-700 hover:text-[#ff4d2d] transition-colors p-2'
               onClick={() => navigate('/cart')}
@@ -124,16 +134,17 @@ function Nav() {
                   <span className='hidden sm:inline'>Add Item</span>
                 </button>
 
-                {/* UPDATED: Appended active navigation route linking to Owner Dashboard page */}
                 <button 
                   onClick={() => navigate('/dashboard/orders')}
                   className='relative flex items-center gap-2 text-gray-700 hover:text-[#ff4d2d] transition-all font-semibold text-sm group'
                 >
                   <div className='relative'>
                     <LuLayoutList size={22} className='group-hover:scale-110 transition-transform' />
-                    <span className='absolute -top-2 -right-2 bg-[#ff4d2d] text-white text-[10px] w-4 h-4 rounded-full flex items-center justify-center font-bold border-2 border-[#fff9f6]'>
-                        0
-                    </span>
+                    {ownerBadgeCount > 0 && (
+                      <span className='absolute -top-2 -right-2 bg-[#ff4d2d] text-white text-[10px] w-4 h-4 rounded-full flex items-center justify-center font-bold border-2 border-[#fff9f6] animate-bounce'>
+                        {ownerBadgeCount}
+                      </span>
+                    )}
                   </div>
                   <span className='hidden sm:inline'>My Orders</span>
                 </button>
@@ -163,21 +174,30 @@ function Nav() {
                 {!isOwner && (
                   <button 
                     onClick={() => { navigate('/my-orders'); setShowInfo(false); }}
-                    className='sm:hidden text-gray-700 font-bold text-sm text-left hover:bg-orange-50 p-2 rounded-lg transition-colors'
+                    className='relative sm:hidden text-gray-700 font-bold text-sm text-left hover:bg-orange-50 p-2 rounded-lg transition-colors flex items-center justify-between w-full'
                   >
-                    Track Orders
+                    <span>Track Orders</span>
+                    {userBadgeCount > 0 && (
+                      <span className='bg-[#ff4d2d] text-white text-[9px] px-1.5 py-0.5 rounded-full font-bold ml-2'>
+                        {userBadgeCount}
+                      </span>
+                    )}
                   </button>
                 )}
                 
                 {isOwner && myShopData && (
                   <button 
                     onClick={() => { navigate('/dashboard/orders'); setShowInfo(false); }}
-                    className='sm:hidden text-gray-700 font-bold text-sm text-left hover:bg-orange-50 p-2 rounded-lg transition-colors'
+                    className='relative sm:hidden text-gray-700 font-bold text-sm text-left hover:bg-orange-50 p-2 rounded-lg transition-colors flex items-center justify-between w-full'
                   >
-                    My Orders
+                    <span>My Orders</span>
+                    {ownerBadgeCount > 0 && (
+                      <span className='bg-[#ff4d2d] text-white text-[9px] px-1.5 py-0.5 rounded-full font-bold ml-2'>
+                        {ownerBadgeCount}
+                      </span>
+                    )}
                   </button>
                 )}
-                {/* ------------------------------------------- */}
 
                 <button 
                   className='text-[#ff4d2d] font-bold text-sm text-left hover:bg-orange-50 p-2 rounded-lg transition-colors' 

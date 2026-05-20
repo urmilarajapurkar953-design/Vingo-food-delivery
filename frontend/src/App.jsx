@@ -20,6 +20,9 @@ import OrderPlaced from './pages/OrderPlaced';
 import UserOrderPage from './pages/UserOrderPage';
 import OwnerOrderPage from './pages/OwnerOrderPage';
 
+// Import our new Socket Provider
+import { SocketProvider } from './context/SocketContext';
+
 export const serverUrl = 'http://localhost:8000';
 
 function App() {
@@ -29,26 +32,20 @@ function App() {
   useGetCity();
   useGetMyShop();
   
-  // Your user data profile is extracted here as 'userData'
   const { userData } = useSelector((state) => state.user || {});
 
   return (
-    <>
+    <SocketProvider>
       <Toaster />
       
-      {/* 1. userData: User must be logged in
-          2. !hideNavPaths.includes(...): Current page must NOT be /create-edit-shop or /checkout
-      */}
       {userData && !hideNavPaths.includes(location.pathname) && <Nav />} 
 
       <Routes>
         <Route path="/" element={<Navigate to="/home" />} />
         
-        {/* If no userData, show Auth pages; otherwise go Home */}
         <Route path="/signup" element={!userData ? <SignUp /> : <Navigate to="/home" />} />
         <Route path="/signin" element={!userData ? <SignIn /> : <Navigate to="/home" />} />
         
-        {/* If userData exists, show Home; otherwise go to Signin */}
         <Route path="/home" element={userData ? <Home /> : <Navigate to="/signin" />} />
         <Route path="/create-edit-shop" element={userData ? <CreateEditShop /> : <Navigate to="/signin" />} />
         <Route path="/add-item" element={userData ? <AddItem /> : <Navigate to="/signin" />} />
@@ -58,13 +55,12 @@ function App() {
         <Route path="/checkout" element={userData ? <CheckOut /> : <Navigate to="/signin" />} />
         <Route path="/order-placed" element={userData ? <OrderPlaced /> : <Navigate to="/signin" />} />
         
-        {/* FIXED: Replaced 'currentUser' with 'userData' so it references your active Redux state */}
         <Route path="/my-orders" element={userData ? <UserOrderPage currentUser={userData} /> : <Navigate to="/signin" />} />
-        <Route path="/dashboard/orders" element={userData ? <OwnerOrderPage /> : <Navigate to="/signin" />} />
+        <Route path="/dashboard/orders" element={userData ? <OwnerOrderPage currentOwnerId={userData?._id} /> : <Navigate to="/signin" />} />
 
         <Route path="*" element={<div>404 - Not Found</div>} />
       </Routes>
-    </>
+    </SocketProvider>
   );
 }
 

@@ -36,6 +36,12 @@ const shopOrderSchema = new mongoose.Schema({
         type: Number,
         required: true
     },
+    // ADDED CRITICAL FIELD: Status definition mapping ensures data shifts persist on refresh
+    status: {
+        type: String,
+        enum: ["Pending", "Preparing", "Out for Delivery", "Completed"],
+        default: "Pending"
+    },
     shopOrderItems: [shopOrderItemSchema]
 }, {
     timestamps: true
