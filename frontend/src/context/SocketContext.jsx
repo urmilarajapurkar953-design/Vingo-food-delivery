@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useEffect, useState } from 'react';
+import React, { createContext, useContext, useEffect, useState, useRef } from 'react';
 import { io } from 'socket.io-client';
 import { useSelector } from 'react-redux';
 import { useLocation } from 'react-router-dom';
@@ -16,10 +16,19 @@ export const SocketProvider = ({ children }) => {
   const [ownerBadgeCount, setOwnerBadgeCount] = useState(0);
   const [userBadgeCount, setUserBadgeCount] = useState(0);
 
+  // Keep a live mutable reference to the active path to bypass React closure traps
+  const currentPathRef = useRef(location.pathname);
+  useEffect(() => {
+    currentPathRef.current = location.pathname;
+  }, [location.pathname]);
+
   useEffect(() => {
     // If the user logs out or session is empty, disconnect cleanly
     if (!userData?._id) {
-      if (socket) socket.disconnect();
+      if (socket) {
+        socket.disconnect();
+        setSocket(null);
+      }
       return;
     }
 
@@ -32,21 +41,23 @@ export const SocketProvider = ({ children }) => {
 
     // 1. Listen for new incoming orders (Owner Badge increment logic)
     newSocket.on('newOrderReceived', (incomingOrder) => {
-      console.log("Global Socket Catch: New order received for owner room");
-      if (location.pathname !== '/dashboard/orders') {
+      console.log("Global Socket Catch: New order received, active location path is:", currentPathRef.current);
+      if (currentPathRef.current !== '/dashboard/orders') {
         setOwnerBadgeCount((prev) => prev + 1);
       }
     });
 
     // 2. Listen for delivery milestones (Customer Tracking Badge increment logic)
     newSocket.on('orderStatusUpdated', (data) => {
-      console.log("Global Socket Catch: Order status update for customer room");
-      if (location.pathname !== '/my-orders') {
+      console.log("Global Socket Catch: Order status update, active location path is:", currentPathRef.current);
+      if (currentPathRef.current !== '/my-orders') {
         setUserBadgeCount((prev) => prev + 1);
       }
     });
 
     return () => {
+      newSocket.off('newOrderReceived');
+      newSocket.off('orderStatusUpdated');
       newSocket.disconnect();
     };
   }, [userData?._id]);

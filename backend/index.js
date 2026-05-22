@@ -24,23 +24,28 @@ const io = new Server(server, {
     }
 });
 
+// Attaches the socket instance to Express so your controllers can call: req.app.get("io")
 app.set("io", io);
 
 io.on("connection", (socket) => {
+    console.log(`🔌 New WebSocket client handshake established: ${socket.id}`);
+
     // STANDARDIZED: Handles both users and owners checking into their secure ID channel spaces
     socket.on("joinRoom", (id) => {
-        socket.join(id);
-        console.log(`Socket entity registered inside channel: ${id}`);
+        if (!id) return console.log("⚠️ Warning: Received an empty ID on joinRoom");
+        socket.join(id.toString());
+        console.log(`🎯 Socket entity registered inside channel: ${id}`);
     });
     
     // Kept fallback for old reference if components trigger it
     socket.on("joinUserRoom", (userId) => {
-        socket.join(userId);
-        console.log(`User registered inside real-time notification room: ${userId}`);
+        if (!userId) return console.log("⚠️ Warning: Received an empty userId on joinUserRoom");
+        socket.join(userId.toString());
+        console.log(`👤 User registered inside real-time notification room: ${userId}`);
     });
     
     socket.on("disconnect", () => {
-        console.log("Client disconnected from streaming room socket context");
+        console.log(`❌ Client disconnected from streaming room socket: ${socket.id}`);
     });
 });
 
@@ -63,5 +68,5 @@ const PORT = process.env.PORT || 8000;
 
 server.listen(PORT, () => {
     connectDB();
-    console.log(`Server is running on port ${PORT}`);
+    console.log(`🚀 Server is cleanly running on port ${PORT}`);
 });
