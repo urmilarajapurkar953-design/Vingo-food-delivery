@@ -12,6 +12,7 @@ import authRouter from "./routes/auth.routes.js";
 import shopRouter from "./routes/shop.routes.js";
 import itemRouter from "./routes/item.routes.js";
 import orderRouter from "./routes/order.routes.js"; 
+import deliveryRouter from "./routes/delivery.routes.js";
 
 const app = express();
 
@@ -63,6 +64,7 @@ app.use("/api/user", userRouter);
 app.use("/api/item", itemRouter);
 app.use("/api/orders", orderRouter); 
 app.use("/api/v1/shops", shopRouter); 
+app.use("/api/delivery", deliveryRouter);
 
 const PORT = process.env.PORT || 8000; 
 

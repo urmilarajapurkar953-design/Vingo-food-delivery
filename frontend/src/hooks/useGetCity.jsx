@@ -24,7 +24,7 @@ const useGetCity = () => {
             const addressData = response.data.results[0]; // In JSON format, properties are at the top level
             const fullAddress = addressData.formatted;
 
-            dispatch(setCurrentCity(addressData.city));
+            dispatch(setCurrentCity(addressData.city|| addressData.county));
             dispatch(setCurrentState(addressData.state));
             dispatch(setCurrentAddress(fullAddress)); 
             dispatch(setAddress(fullAddress));        

@@ -19,6 +19,7 @@ import CheckOut from './pages/CheckOut';
 import OrderPlaced from './pages/OrderPlaced'; 
 import UserOrderPage from './pages/UserOrderPage';
 import OwnerOrderPage from './pages/OwnerOrderPage';
+import useUpdateLocation from './hooks/useUpdateLocation';
 
 // Import our new Socket Provider
 import { SocketProvider } from './context/SocketContext';
@@ -31,6 +32,7 @@ function App() {
   useGetCurrentUser(); 
   useGetCity();
   useGetMyShop();
+  useUpdateLocation();
   
   const { userData } = useSelector((state) => state.user || {});
 
