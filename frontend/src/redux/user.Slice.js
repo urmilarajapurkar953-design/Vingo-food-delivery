@@ -10,10 +10,17 @@ const userSlice = createSlice({
     currentCity: null,
     currentState: null,
     currentAddress: null,
+    loading: true, // Maintained as true for initial authentication fetch guard
     cartItem: savedCart ? JSON.parse(savedCart) : [] // 2. Initialize with saved data
   },
   reducers: {
-    setUserData: (state, action) => { state.userData = action.payload; },
+    setUserData: (state, action) => { 
+      state.userData = action.payload; 
+      state.loading = false; // CRITICAL: Marks completion of fetch cycle
+    },
+    setLoading: (state, action) => {
+      state.loading = action.payload; // Allows manual control over loading transitions
+    },
     setCurrentCity: (state, action) => { state.currentCity = action.payload; },
     setCurrentState: (state, action) => { state.currentState = action.payload; },
     setCurrentAddress: (state, action) => { state.currentAddress = action.payload; },
@@ -47,7 +54,6 @@ const userSlice = createSlice({
       localStorage.setItem("cartItem", JSON.stringify(state.cartItem));
     },
 
-    // UPDATED: Added clearCart reducer to prevent frontend app crash during checkout
     clearCart: (state) => {
       state.cartItem = [];
       localStorage.removeItem("cartItem");
@@ -58,13 +64,14 @@ const userSlice = createSlice({
 // 3. Destructuring and exporting actions securely
 export const {
   setUserData,
+  setLoading, // Added and exported to manage app authentication barrier cleanly
   setCurrentCity,
   setCurrentState,
   setCurrentAddress, 
   addToCart,
   decrementQuantity,
   removeFromCart,
-  clearCart // UPDATED: Exported clearCart action handler here
+  clearCart 
 } = userSlice.actions;
 
 export default userSlice.reducer;

@@ -2,7 +2,7 @@ import axios from 'axios'
 import { useEffect } from 'react'
 import { serverUrl } from '../App'
 import { useDispatch } from 'react-redux'
-import { setUserData } from '../redux/user.Slice'
+import { setUserData, setLoading } from '../redux/user.Slice'
 
 function useGetCurrentUser() {
   const dispatch = useDispatch()
@@ -10,26 +10,27 @@ function useGetCurrentUser() {
   useEffect(() => {
     const fetchUser = async () => {
       try {
+        // Enforce the loading barrier before kicking off our async call
+        dispatch(setLoading(true))
+
         const result = await axios.get(`${serverUrl}/api/user/current`, {
           withCredentials: true,
         })
 
-        // Check if your backend sends { user: {...} } or just {...}
-        // If the console.log shows an object WITH a user property, use result.data.user
         console.log("API Response:", result.data)
         
         const userData = result.data.user || result.data
         dispatch(setUserData(userData))
 
       } catch (error) {
-        // If unauthorized (401), ensure userData is null so app doesn't hang
         console.error("Error fetching current user:", error)
-        dispatch(setUserData(null))
+        // If 401 or network error happens, turn off loading and clean down any partial state
+        dispatch(setUserData(null)) 
       }
     }
 
     fetchUser()
-  }, [dispatch]) // Added dispatch to dependency array for best practice
+  }, [dispatch]) 
 }
 
 export default useGetCurrentUser

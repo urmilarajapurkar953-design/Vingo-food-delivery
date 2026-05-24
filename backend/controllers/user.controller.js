@@ -17,19 +17,14 @@ export const getCurrentUser = async (req, res) => {
 export const updateUserLocation = async (req, res) => {
     try {
         const { lat, lon } = req.body;
-        
-        // FIX: Changed from req.userId to req.user?.id to match your auth structure
-        const userId = req.user?.id;
-        if (!userId) {
-            return res.status(401).json({ message: "Unauthorized access: Missing user identification" });
-        }
+        const userId = req.user?.id; // Using your auth structure
 
         const user = await User.findByIdAndUpdate(userId, {
             location: {
                 type: 'Point',
-                coordinates: [lon, lat] // GEOJson coordinates order is always [longitude, latitude]
+                coordinates: [lon, lat]
             }
-        }, { new: true });
+        }, { returnDocument: 'after' }); // ✅ FIXED: Swapped { new: true } out to eliminate the deprecation warning
 
         if (!user) {
             return res.status(400).json({ message: "user is not found" });

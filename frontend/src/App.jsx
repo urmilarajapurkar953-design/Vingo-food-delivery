@@ -1,5 +1,5 @@
-import React from 'react'
-import { Route, Routes, Navigate } from 'react-router-dom';
+import React, { useEffect } from 'react'
+import { Route, Routes, Navigate, useLocation, useNavigate } from 'react-router-dom';
 import { Toaster } from 'react-hot-toast';
 import SignUp from './pages/signUp';
 import SignIn from './pages/signIn';
@@ -11,7 +11,6 @@ import { useSelector } from 'react-redux';
 import useGetCity from './hooks/useGetCity';
 import useGetMyShop from './hooks/useGetMyShop';
 import CreateEditShop from './pages/CreateEditShop';
-import { useLocation } from 'react-router-dom';
 import AddItem from './pages/AddItem';
 import EditItem from './pages/EditItem';
 import Cart from './pages/Cart';
@@ -20,27 +19,63 @@ import OrderPlaced from './pages/OrderPlaced';
 import UserOrderPage from './pages/UserOrderPage';
 import OwnerOrderPage from './pages/OwnerOrderPage';
 import useUpdateLocation from './hooks/useUpdateLocation';
-
-// Import our new Socket Provider
+import DeliveryBoy from './components/DeliveryBoy';
 import { SocketProvider } from './context/SocketContext';
 
 export const serverUrl = 'http://localhost:8000';
 
 function App() {
   const location = useLocation();
-  const hideNavPaths = ['/create-edit-shop', '/checkout', '/order-placed', '/my-orders', '/dashboard/orders'];
+  const navigate = useNavigate();
+  
+  const hideNavPaths = [
+    '/create-edit-shop', 
+    '/checkout', 
+    '/order-placed', 
+    '/my-orders', 
+    '/dashboard/orders'
+  ];
+
   useGetCurrentUser(); 
   useGetCity();
   useGetMyShop();
   useUpdateLocation();
   
-  const { userData } = useSelector((state) => state.user || {});
+  const { userData, loading } = useSelector((state) => state.user);
+
+  // CRITICAL TYPO PATCH: Accommodates both "delivery" and your exact backend value "deliveryBoy"
+  const userRoleCleaned = userData?.role?.toLowerCase() || userData?.user?.role?.toLowerCase() || "";
+  const isDeliveryBoy = userRoleCleaned === "delivery" || userRoleCleaned === "deliveryboy";
+
+  // Debug trace verification logs
+  console.log("=== RIDER CONSOLE FIXED CHECK ===");
+  console.log("Detected backend role raw value:", userData?.role);
+  console.log("Matches evaluation rule now?:", isDeliveryBoy);
+
+  useEffect(() => {
+    if (!loading && userData && isDeliveryBoy && location.pathname === '/home') {
+      console.log("🔄 Rerouting driver away from consumer landing view...");
+      navigate('/delivery/dashboard', { replace: true });
+    }
+  }, [userData, loading, isDeliveryBoy, location.pathname, navigate]);
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex flex-col items-center justify-center">
+        <div className="w-10 h-10 border-4 border-orange-500 border-t-transparent rounded-full animate-spin"></div>
+        <p className="text-sm text-gray-500 mt-4 font-semibold">Authenticating user console...</p>
+      </div>
+    );
+  }
+
+  // FIXED: Removed isDeliveryBoy and explicit dashboard checks to let the Navbar render safely for riders
+  const shouldHideNav = hideNavPaths.includes(location.pathname);
 
   return (
     <SocketProvider>
       <Toaster />
       
-      {userData && !hideNavPaths.includes(location.pathname) && <Nav />} 
+      {userData && !shouldHideNav && <Nav />} 
 
       <Routes>
         <Route path="/" element={<Navigate to="/home" />} />
@@ -48,7 +83,21 @@ function App() {
         <Route path="/signup" element={!userData ? <SignUp /> : <Navigate to="/home" />} />
         <Route path="/signin" element={!userData ? <SignIn /> : <Navigate to="/home" />} />
         
-        <Route path="/home" element={userData ? <Home /> : <Navigate to="/signin" />} />
+        <Route 
+          path="/home" 
+          element={
+            userData ? (
+              isDeliveryBoy ? (
+                <Navigate to="/delivery/dashboard" replace />
+              ) : (
+                <Home />
+              )
+            ) : (
+              <Navigate to="/signin" />
+            )
+          } 
+        />
+        
         <Route path="/create-edit-shop" element={userData ? <CreateEditShop /> : <Navigate to="/signin" />} />
         <Route path="/add-item" element={userData ? <AddItem /> : <Navigate to="/signin" />} />
         <Route path="/edit-item/:itemId" element={userData ? <EditItem /> : <Navigate to="/signin" />} />
@@ -59,6 +108,7 @@ function App() {
         
         <Route path="/my-orders" element={userData ? <UserOrderPage currentUser={userData} /> : <Navigate to="/signin" />} />
         <Route path="/dashboard/orders" element={userData ? <OwnerOrderPage currentOwnerId={userData?._id} /> : <Navigate to="/signin" />} />
+        <Route path="/delivery/dashboard" element={isDeliveryBoy ? <DeliveryBoy /> : <Navigate to="/signin" />} />
 
         <Route path="*" element={<div>404 - Not Found</div>} />
       </Routes>

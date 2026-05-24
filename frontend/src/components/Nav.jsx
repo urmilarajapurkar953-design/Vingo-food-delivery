@@ -27,24 +27,32 @@ function Nav() {
 
   const totalCartItems = cartItem?.reduce((acc, item) => acc + item.quantity, 0) || 0;
 
+  // UPDATED LOGOUT HANDLER: Uses standard POST request layout with fallback safety net
   const handleLogout = async () => {
     try {
-        await axios.get(`${serverUrl}/api/auth/signout`, { withCredentials: true });
+        await axios.post(`${serverUrl}/api/user/logout`, {}, { withCredentials: true });
         dispatch(setUserData(null));
         setShowInfo(false);
         navigate('/signin');
     } catch (error) {
-        console.error("Logout failed", error);
+        console.error("Logout failed, running fallback route cleanup:", error);
+        // Fallback safety net guarantees frontend state resets cleanly regardless of server response
+        dispatch(setUserData(null));
+        setShowInfo(false);
+        navigate('/signin');
     }
   };
 
   const isOwner = userData?.role === "owner";
+  
+  // DYNAMIC FILTER: Check if the logged-in user profile is a delivery boy
+  const isDelivery = userData?.role?.toLowerCase() === "delivery" || userData?.role?.toLowerCase() === "deliveryboy";
 
   return (
     <div className='w-full h-[80px] flex items-center justify-between px-[15px] md:px-[40px] fixed top-0 z-[9999] bg-[#fff9f6] border-b border-gray-100'>
       
-      {/* --- MOBILE SEARCH OVERLAY (Users Only) --- */}
-      {!isOwner && isMobileSearchOpen && (
+      {/* --- MOBILE SEARCH OVERLAY (Hidden for Owners and Delivery Boys) --- */}
+      {!isOwner && !isDelivery && isMobileSearchOpen && (
         <div className='absolute inset-0 bg-[#fff9f6] z-[10000] flex items-center px-4'>
             <div className='flex items-center bg-white border border-gray-200 rounded-full px-4 py-2 w-full shadow-md'>
                 <IoIosSearch size={22} className='text-gray-400' />
@@ -56,14 +64,25 @@ function Nav() {
 
       {/* --- LEFT: LOGO & LOCATION --- */}
       <div className='flex items-center gap-4 md:gap-8'>
-        <h1 
-          className='text-2xl md:text-3xl font-bold text-[#ff4d2d] cursor-pointer'
-          onClick={() => navigate('/')}
-        >
-          Vingo
-        </h1>
+        {/* ADDED: flex items-center gap-2 container layout wrapper to sit logo and badge inline cleanly */}
+        <div className='flex items-center gap-2'>
+          <h1 
+            className='text-2xl md:text-3xl font-bold text-[#ff4d2d] cursor-pointer'
+            onClick={() => navigate('/')}
+          >
+            Vingo
+          </h1>
+          
+          {/* ADDED: Conditional inline Rider badge matching your design layout system */}
+          {isDelivery && (
+            <span className="text-[11px] font-bold bg-orange-100 text-[#ff4d2d] px-2 py-0.5 rounded shadow-sm select-none">
+              Rider
+            </span>
+          )}
+        </div>
 
-        {!isOwner && (
+        {/* Location layout details hidden for Owners and Delivery Boys */}
+        {!isOwner && !isDelivery && (
           <div className='hidden lg:flex items-center gap-2 text-gray-600 border-l border-gray-300 pl-6 max-w-[200px]'>
             <FaLocationDot className='text-[#ff4d2d] shrink-0' size={18} />
             <div className='flex flex-col overflow-hidden'>
@@ -74,8 +93,8 @@ function Nav() {
         )}
       </div>
 
-      {/* --- MIDDLE: SEARCH (Hidden for Owners) --- */}
-      {!isOwner && (
+      {/* --- MIDDLE: SEARCH (Hidden for Owners and Delivery Boys) --- */}
+      {!isOwner && !isDelivery && (
         <div className='hidden md:flex items-center bg-white border border-gray-200 rounded-full px-5 py-3 w-full max-w-[450px] lg:max-w-[600px] shadow-sm'>
           <IoIosSearch size={24} className='text-gray-400 mr-2' />
           <input type="text" placeholder="Search for food, restaurants or cuisines..." className='bg-transparent outline-none w-full text-[15px] text-gray-700' />
@@ -85,8 +104,8 @@ function Nav() {
       {/* --- RIGHT: ACTIONS & PROFILE --- */}
       <div className='flex items-center gap-4 md:gap-6'>
         
-        {/* User Specific Actions */}
-        {!isOwner && (
+        {/* User Specific Actions (Hidden completely if user is a Delivery Boy) */}
+        {!isOwner && !isDelivery && (
           <>
             <button 
               onClick={() => navigate('/my-orders')}
@@ -171,7 +190,8 @@ function Nav() {
                 <div className='h-[1px] bg-gray-100 w-full'></div>
                 
                 {/* --- RESPONSIVE DROPDOWN LINK INCLUSIONS --- */}
-                {!isOwner && (
+                {/* Track orders text dropdown option hidden automatically if Delivery Boy */}
+                {!isOwner && !isDelivery && (
                   <button 
                     onClick={() => { navigate('/my-orders'); setShowInfo(false); }}
                     className='relative sm:hidden text-gray-700 font-bold text-sm text-left hover:bg-orange-50 p-2 rounded-lg transition-colors flex items-center justify-between w-full'
