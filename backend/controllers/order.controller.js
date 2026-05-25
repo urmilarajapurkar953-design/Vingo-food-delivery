@@ -225,23 +225,34 @@ export const getOwnerShopOrders = async (req, res) => {
   }
 };
 
-// 4. UPDATE SUB-ORDER STATUS (Includes the Delivery Boy Broadcast Logic)
+
 export const updateSubOrderStatus = async (req, res) => {
   try {
     const { masterOrderId, subOrderId, status } = req.body;
+    console.log(`📦 Incoming Status Change: Master [${masterOrderId}] | Sub [${subOrderId}] -> "${status}"`);
     
+    // FIXED: Changed returnDocument to 'new: true' for Mongoose normalization
     const updatedMasterOrder = await Order.findOneAndUpdate(
       { _id: masterOrderId, "shopOrders._id": subOrderId },
       { $set: { "shopOrders.$.status": status } },
-      { returnDocument: 'after' }
+      { new: true } 
     ).populate("user", "fullName email phone");
 
     if (!updatedMasterOrder) {
+      console.error("❌ Master Order document could not be found or updated.");
       return res.status(404).json({ success: false, message: "Order element not found." });
     }
 
     const subOrder = updatedMasterOrder.shopOrders.id(subOrderId);
+    if (!subOrder) {
+      console.error("❌ Sub-order segment matching ID was missing.");
+      return res.status(404).json({ success: false, message: "Sub-order details not found." });
+    }
+
     const activeShop = await Shop.findById(subOrder.shop);
+    if (!activeShop) {
+      console.error(`❌ Shop ID [${subOrder.shop}] missing from database records.`);
+    }
 
     const io = req.app.get("io");
     if (io) {
@@ -252,47 +263,43 @@ export const updateSubOrderStatus = async (req, res) => {
       });
     }
 
-    if (status === "Out for Delivery" && activeShop && activeShop.location) {
-      const shopCoordinates = activeShop.location.coordinates; 
-
+    if (status === "Out for Delivery") {
+      // TEMPORARY TESTING MATRIX: Push to ALL riders to verify pipeline linkage
       const nearbyDrivers = await User.find({
-        role: "delivery",
-        location: {
-          $near: {
-            $geometry: {
-              type: "Point",
-              coordinates: shopCoordinates
-            },
-            $maxDistance: 5000 
-          }
-        }
+        role: { $in: [/^delivery$/i, /^deliveryboy$/i] }
       });
+
+      console.log(`📡 Broadcast Engine: Found (${nearbyDrivers.length}) system riders available for assignment.`);
 
       if (nearbyDrivers.length > 0) {
         const driverIds = nearbyDrivers.map(driver => driver._id);
 
         const newAssignment = new DeliveryAssignment({
           order: updatedMasterOrder._id,
-          shop: activeShop._id,
+          shop: subOrder.shop,
           shopOrderId: subOrderId,
-          broadcasted: driverIds,
+          broadcasted: driverIds, // Array check sync optimization
           status: "broadcasted"
         });
         await newAssignment.save();
+        console.log(`✅ DeliveryAssignment successfully minted in MongoDB! ID: ${newAssignment._id}`);
 
         if (io) {
           driverIds.forEach(driverId => {
+            console.log(`⚡ Sending Socket event to driver pipeline stream: ${driverId}`);
             io.to(driverId.toString()).emit("newDeliveryJobAvailable", {
               assignmentId: newAssignment._id,
               masterOrderId: updatedMasterOrder._id,
               subOrderId: subOrderId,
-              shopName: activeShop.name,
-              shopAddress: activeShop.text || activeShop.address,
+              shopName: activeShop?.name || "Local Kitchen",
+              shopAddress: activeShop?.text || activeShop?.address || "Store Address",
               deliveryAddress: updatedMasterOrder.deliveryAddress,
               subTotal: subOrder.subTotal
             });
           });
         }
+      } else {
+        console.warn("⚠️ Warning: 0 active delivery boy accounts found in the database matching role criteria.");
       }
     }
 
@@ -303,7 +310,45 @@ export const updateSubOrderStatus = async (req, res) => {
     });
 
   } catch (error) {
-    console.error("System Error inside updateSubOrderStatus:", error);
+    console.error("💥 System Crash inside updateSubOrderStatus:", error);
+    return res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+export const getAvailableJobs = async (req, res) => {
+  try {
+    const driverId = req.user?._id;
+    console.log("🔍 Checking initialized job feed for Driver ID:", driverId);
+
+    if (!driverId) {
+      return res.status(401).json({ success: false, message: "Unauthorized: No driver ID found in session tokens." });
+    }
+
+    // DEBUG: Look up assignments ignoring status to see if the driver is listed in the broadcast array at all
+    const allAssignmentsForMe = await DeliveryAssignment.find({
+      broadcasted: driverId
+    });
+    console.log(`📡 Database Check: Found total ${allAssignmentsForMe.length} assignments linked to this driver ID in history.`);
+
+    // Find active jobs
+    const activeAssignments = await DeliveryAssignment.find({
+      broadcasted: driverId,
+      status: "broadcasted"
+    }).populate("shop").populate("order");
+
+    const formattedJobs = activeAssignments.map(job => ({
+      assignmentId: job._id,
+      masterOrderId: job.order?._id,
+      subOrderId: job.shopOrderId,
+      shopName: job.shop?.name,
+      shopAddress: job.shop?.text || job.shop?.address,
+      deliveryAddress: job.order?.deliveryAddress,
+      subTotal: job.order?.shopOrders?.find(so => so._id.toString() === job.shopOrderId.toString())?.subTotal || 0
+    }));
+
+    return res.status(200).json({ success: true, jobs: formattedJobs });
+  } catch (error) {
+    console.error("❌ Error inside getAvailableJobs API endpoint:", error);
     return res.status(500).json({ success: false, message: error.message });
   }
 };

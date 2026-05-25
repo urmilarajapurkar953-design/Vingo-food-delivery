@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useSocket } from '../context/SocketContext';
 import { FaMapMarkerAlt, FaStore, FaMoneyBillWave, FaClock, FaShippingFast } from 'react-icons/fa';
+import { useSelector } from 'react-redux'; // ADDED: Pull auth state tracking safely from Redux
 import axios from 'axios';
 import { serverUrl } from '../App';
 import toast from 'react-hot-toast';
@@ -11,6 +12,34 @@ const DeliveryBoy = () => {
   const [activeDelivery, setActiveDelivery] = useState(null);
   const [loadingId, setLoadingId] = useState(null);
 
+  // ADDED: Track your user slice details directly to prevent unauthenticated initialization requests
+  const { userData, loading } = useSelector((state) => state.user || {});
+  const driverId = userData?._id;
+
+  // FIXED: Fetch missed, active jobs ONLY when the authenticated driverId is confirmed ready
+  useEffect(() => {
+    const fetchExistingJobs = async () => {
+      // Pause execution if the application is bootstrapping or user data isn't loaded yet
+      if (!driverId) {
+        console.log("⏳ Delaying API dispatch check: Auth state is still loading...");
+        return;
+      }
+
+      try {
+        console.log(`🚀 Auth validated! Fetching job history manifest context for driver: ${driverId}`);
+        const response = await axios.get(`${serverUrl}/api/delivery/available-jobs`, { withCredentials: true });
+        if (response.data.success) {
+          setAvailableJobs(response.data.jobs);
+        }
+      } catch (error) {
+        console.error("Error fetching initialized jobs:", error);
+      }
+    };
+
+    fetchExistingJobs();
+  }, [driverId, loading]); // ⚡ Triggers automatically the second your async auth state resolves
+
+  // REAL-TIME BROADCAST LISTENER
   useEffect(() => {
     if (!socket) return;
 
@@ -59,7 +88,6 @@ const DeliveryBoy = () => {
   };
 
   return (
-    // FIXED Layout positioning constraint: Added mt-[80px] to clear the fixed layout top Nav frame spacing bounds cleanly
     <div className="min-h-screen bg-gray-50 mt-[80px] pt-6 px-4 md:px-8 pb-12">
       <div className="max-w-6xl mx-auto grid grid-cols-1 lg:grid-cols-3 gap-8">
         
@@ -139,7 +167,6 @@ const DeliveryBoy = () => {
 
         {/* --- RIGHT COLUMN: ACTIVE MISSION CONTAINER NODE --- */}
         <div className="lg:col-span-1">
-          {/* Adjusted absolute layout sticky positioning marker constraints to play nice with fixed custom header offset logic */}
           <div className="bg-white rounded-2xl border border-gray-100 p-6 shadow-sm sticky top-[104px]">
             <h2 className="text-lg font-bold text-gray-800 border-b border-gray-100 pb-3 flex items-center gap-2">
               📋 My Active Run
