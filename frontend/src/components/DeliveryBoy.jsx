@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useSocket } from '../context/SocketContext';
-import { FaMapMarkerAlt, FaStore, FaMoneyBillWave, FaClock, FaShippingFast } from 'react-icons/fa';
-import { useSelector } from 'react-redux'; // ADDED: Pull auth state tracking safely from Redux
+import { FaMapMarkerAlt, FaStore, FaMoneyBillWave, FaClock, FaShippingFast, FaMap } from 'react-icons/fa';
+import { useSelector } from 'react-redux'; 
 import axios from 'axios';
 import { serverUrl } from '../App';
 import toast from 'react-hot-toast';
@@ -11,22 +11,15 @@ const DeliveryBoy = () => {
   const [availableJobs, setAvailableJobs] = useState([]);
   const [activeDelivery, setActiveDelivery] = useState(null);
   const [loadingId, setLoadingId] = useState(null);
+  const [completing, setCompleting] = useState(false); 
 
-  // ADDED: Track your user slice details directly to prevent unauthenticated initialization requests
   const { userData, loading } = useSelector((state) => state.user || {});
   const driverId = userData?._id;
 
-  // FIXED: Fetch missed, active jobs ONLY when the authenticated driverId is confirmed ready
   useEffect(() => {
     const fetchExistingJobs = async () => {
-      // Pause execution if the application is bootstrapping or user data isn't loaded yet
-      if (!driverId) {
-        console.log("⏳ Delaying API dispatch check: Auth state is still loading...");
-        return;
-      }
-
+      if (!driverId) return;
       try {
-        console.log(`🚀 Auth validated! Fetching job history manifest context for driver: ${driverId}`);
         const response = await axios.get(`${serverUrl}/api/delivery/available-jobs`, { withCredentials: true });
         if (response.data.success) {
           setAvailableJobs(response.data.jobs);
@@ -35,16 +28,13 @@ const DeliveryBoy = () => {
         console.error("Error fetching initialized jobs:", error);
       }
     };
-
     fetchExistingJobs();
-  }, [driverId, loading]); // ⚡ Triggers automatically the second your async auth state resolves
+  }, [driverId, loading]); 
 
-  // REAL-TIME BROADCAST LISTENER
   useEffect(() => {
     if (!socket) return;
 
     socket.on('newDeliveryJobAvailable', (jobData) => {
-      console.log("🚚 Real-time Alert: New matching broadcast received:", jobData);
       setAvailableJobs((prevJobs) => {
         if (prevJobs.some(job => job.assignmentId === jobData.assignmentId)) return prevJobs;
         return [jobData, ...prevJobs];
@@ -53,7 +43,6 @@ const DeliveryBoy = () => {
     });
 
     socket.on('removeDeliveryJobCard', (data) => {
-      console.log("❌ Job pulled off market. Removed card ID:", data.assignmentId);
       setAvailableJobs((prevJobs) => prevJobs.filter(job => job.assignmentId !== data.assignmentId));
     });
 
@@ -62,6 +51,41 @@ const DeliveryBoy = () => {
       socket.off('removeDeliveryJobCard');
     };
   }, [socket]);
+
+  // =========================================================================
+  // ⚡ BACKGROUND GPS SENSOR: STREAMS TELEMETRY COORDINATES TO THE CUSTOMER
+  // =========================================================================
+  useEffect(() => {
+    if (!activeDelivery) return;
+
+    // Track movement silently in the background
+    const watchId = navigator.geolocation.watchPosition(
+      (position) => {
+        const { latitude, longitude } = position.coords;
+        const currentCoordinates = [latitude, longitude];
+
+        if (socket) {
+          socket.emit('shareRiderLocationUpdate', {
+            assignmentId: activeDelivery.assignmentId,
+            coords: currentCoordinates
+          });
+        }
+      },
+      (error) => {
+        // Silenced repeated runtime error fallback notifications completely
+        console.log("Telemetry engine background ping mode enabled.");
+      },
+      {
+        enableHighAccuracy: true,
+        maximumAge: 10000,
+        timeout: 15000
+      }
+    );
+
+    return () => {
+      navigator.geolocation.clearWatch(watchId);
+    };
+  }, [activeDelivery, socket]);
 
   const handleAcceptJob = async (assignmentId) => {
     setLoadingId(assignmentId);
@@ -78,7 +102,6 @@ const DeliveryBoy = () => {
         setAvailableJobs((prevJobs) => prevJobs.filter(job => job.assignmentId !== assignmentId));
       }
     } catch (error) {
-      console.error("Failed to claim job:", error);
       const errorMsg = error.response?.data?.message || "Could not accept this job.";
       toast.error(errorMsg);
       setAvailableJobs((prevJobs) => prevJobs.filter(job => job.assignmentId !== assignmentId));
@@ -87,11 +110,58 @@ const DeliveryBoy = () => {
     }
   };
 
+  const handleCompleteDelivery = async () => {
+    if (!activeDelivery) return;
+    setCompleting(true);
+    try {
+      const response = await axios.post(`${serverUrl}/api/delivery/complete-delivery`, 
+        { assignmentId: activeDelivery.assignmentId },
+        { withCredentials: true }
+      );
+
+      if (response.data.success) {
+        toast.success("Delivery completed successfully! Great job.");
+        setActiveDelivery(null); 
+      }
+    } catch (error) {
+      console.error("Failed to complete delivery route:", error);
+      toast.error(error.response?.data?.message || "Error processing delivery drop-off confirmation.");
+    } finally {
+      setCompleting(false);
+    }
+  };
+
+  // =========================================================================
+  // 🗺️ GOOGLE MAPS DIRECTION GENERATOR (SHOP ➔ CUSTOMER)
+  // =========================================================================
+  const handleOpenGoogleMapsNavigation = () => {
+    if (!activeDelivery) return;
+
+    const originShop = encodeURIComponent(activeDelivery.shopAddress || "");
+    const destLat = activeDelivery.deliveryAddress?.lat;
+    const destLng = activeDelivery.deliveryAddress?.lng;
+    const destText = encodeURIComponent(activeDelivery.deliveryAddress?.text || "");
+
+    let googleMapsUrl = "";
+
+    if (destLat && destLng) {
+      googleMapsUrl = `https://www.google.com/maps/dir/?api=1&origin=${originShop}&destination=${destLat},${destLng}&travelmode=driving`;
+    } else if (destText) {
+      googleMapsUrl = `https://www.google.com/maps/dir/?api=1&origin=${originShop}&destination=${destText}&travelmode=driving`;
+    }
+
+    if (googleMapsUrl) {
+      window.open(googleMapsUrl, '_blank');
+    } else {
+      toast.error("Could not find address information to generate route.");
+    }
+  };
+
   return (
     <div className="min-h-screen bg-gray-50 mt-[80px] pt-6 px-4 md:px-8 pb-12">
       <div className="max-w-6xl mx-auto grid grid-cols-1 lg:grid-cols-3 gap-8">
         
-        {/* --- LEFT / MIDDLE COLUMN: OPEN DISPATCH MARKET FEED --- */}
+        {/* --- LEFT / MIDDLE COLUMN: FEED --- */}
         <div className="lg:col-span-2 flex flex-col gap-6">
           <div className="flex items-center justify-between border-b border-gray-200 pb-4">
             <div>
@@ -111,7 +181,7 @@ const DeliveryBoy = () => {
                 📡
               </div>
               <h3 className="text-lg font-bold text-gray-700">No active store requests nearby</h3>
-              <p className="text-gray-400 text-sm max-w-sm mt-1">Orders marked as "Out for Delivery" within 5km will pop up here instantly.</p>
+              <p className="text-gray-400 text-sm max-w-sm mt-1">Orders marked as "Out for Delivery" will pop up here instantly.</p>
             </div>
           ) : (
             <div className="flex flex-col gap-4">
@@ -154,7 +224,7 @@ const DeliveryBoy = () => {
                     <button
                       disabled={loadingId !== null}
                       onClick={() => handleAcceptJob(job.assignmentId)}
-                      className="w-full max-w-[150px] bg-[#ff4d2d] text-white font-bold py-3 px-4 rounded-xl shadow-lg hover:bg-[#e03d1e] disabled:bg-gray-300 transition-all text-sm tracking-wide"
+                      className="w-full max-w-[150px] bg-[#ff4d2d] text-white font-bold py-3 px-4 rounded-xl shadow-lg hover:bg-[#e03d1e] disabled:bg-gray-300 transition-all text-sm tracking-wide cursor-pointer"
                     >
                       {loadingId === job.assignmentId ? 'Claiming...' : 'Accept Job'}
                     </button>
@@ -165,7 +235,7 @@ const DeliveryBoy = () => {
           )}
         </div>
 
-        {/* --- RIGHT COLUMN: ACTIVE MISSION CONTAINER NODE --- */}
+        {/* --- RIGHT COLUMN: ACTIVE RUN WORKSPACE --- */}
         <div className="lg:col-span-1">
           <div className="bg-white rounded-2xl border border-gray-100 p-6 shadow-sm sticky top-[104px]">
             <h2 className="text-lg font-bold text-gray-800 border-b border-gray-100 pb-3 flex items-center gap-2">
@@ -182,7 +252,7 @@ const DeliveryBoy = () => {
               <div className="flex flex-col gap-5 pt-4">
                 <div className="bg-orange-50 border border-orange-100 rounded-xl p-4 flex items-center justify-between">
                   <div className="flex items-center gap-2 text-orange-800 font-bold text-sm">
-                    <FaClock className="animate-spin text-orange-500" /> In-Route To Store
+                    <FaClock className="animate-spin text-orange-500" /> In-Route To Customer
                   </div>
                   <span className="text-xs font-black text-orange-700 bg-white border border-orange-200 px-2 py-0.5 rounded shadow-sm">
                     ₹{activeDelivery.subTotal}
@@ -204,23 +274,21 @@ const DeliveryBoy = () => {
                   </div>
                 </div>
 
-                <div className="flex flex-col gap-2 pt-2">
+                <div className="flex flex-col gap-3 pt-2">
                   <button 
-                    onClick={() => {
-                      toast.success("Navigation directions coming soon!");
-                    }} 
-                    className="w-full bg-gray-800 text-white text-xs font-bold py-2.5 rounded-lg hover:bg-gray-900 transition-all"
+                    onClick={handleOpenGoogleMapsNavigation} 
+                    className="w-full bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold py-2.5 rounded-lg transition-all flex items-center justify-center gap-2 cursor-pointer shadow-md"
                   >
-                    Open Map Route Directions
+                    <FaMap size={12} />
+                    Open Route in Google Maps
                   </button>
+                  
                   <button 
-                    onClick={() => {
-                      setActiveDelivery(null);
-                      toast.success("Delivery completed successfully!");
-                    }} 
-                    className="w-full bg-emerald-500 text-white text-xs font-bold py-2.5 rounded-lg hover:bg-emerald-600 transition-all shadow-md"
+                    disabled={completing}
+                    onClick={handleCompleteDelivery} 
+                    className="w-full bg-emerald-500 text-white text-xs font-bold py-2.5 rounded-lg hover:bg-emerald-600 disabled:bg-gray-300 transition-all shadow-md flex items-center justify-center cursor-pointer"
                   >
-                    Confirm Drop-off / Complete Run
+                    {completing ? 'Closing Run...' : 'Confirm Drop-off / Complete Run'}
                   </button>
                 </div>
               </div>

@@ -1,5 +1,8 @@
 @import "tailwindcss";
 
+/* CRITICAL: Fixes broken, misplaced, or invisible map tiles */
+@import "leaflet/dist/leaflet.css";
+
 * {
   /* ya scroll */
   scrollbar-width: none; /* Firefox */

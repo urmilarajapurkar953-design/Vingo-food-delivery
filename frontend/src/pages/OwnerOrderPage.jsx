@@ -49,7 +49,7 @@ const OwnerOrderPage = ({ currentOwnerId }) => {
     } catch (err) {
       console.error("Error sourcing metrics database:", err);
     } finally {
-      setLoading(false);
+      loading && setLoading(false);
     }
   };
 
@@ -231,7 +231,6 @@ const OwnerOrderPage = ({ currentOwnerId }) => {
                         <option value="Pending">Pending ⏳</option>
                         <option value="Preparing">Preparing 🍳</option>
                         <option value="Out for Delivery">Out for Delivery 🛵</option>
-                        <option value="Completed">Completed ✅</option>
                       </select>
                     </div>
 

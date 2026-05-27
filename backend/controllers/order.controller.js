@@ -226,12 +226,22 @@ export const getOwnerShopOrders = async (req, res) => {
 };
 
 
+// Rest of file remains identical above...
+
 export const updateSubOrderStatus = async (req, res) => {
   try {
     const { masterOrderId, subOrderId, status } = req.body;
     console.log(`📦 Incoming Status Change: Master [${masterOrderId}] | Sub [${subOrderId}] -> "${status}"`);
     
-    // FIXED: Changed returnDocument to 'new: true' for Mongoose normalization
+    // ✨ ADDED: Enforce strict restaurant boundaries. Prevent owners from skipping to delivery completion.
+    const allowedMerchantStatuses = ["Pending", "Preparing", "Out for Delivery"];
+    if (!allowedMerchantStatuses.includes(status)) {
+      return res.status(400).json({
+        success: false,
+        message: "Action Denied: Merchants can only set orders to Pending, Preparing, or Out for Delivery."
+      });
+    }
+
     const updatedMasterOrder = await Order.findOneAndUpdate(
       { _id: masterOrderId, "shopOrders._id": subOrderId },
       { $set: { "shopOrders.$.status": status } },
@@ -250,9 +260,6 @@ export const updateSubOrderStatus = async (req, res) => {
     }
 
     const activeShop = await Shop.findById(subOrder.shop);
-    if (!activeShop) {
-      console.error(`❌ Shop ID [${subOrder.shop}] missing from database records.`);
-    }
 
     const io = req.app.get("io");
     if (io) {
@@ -264,7 +271,6 @@ export const updateSubOrderStatus = async (req, res) => {
     }
 
     if (status === "Out for Delivery") {
-      // TEMPORARY TESTING MATRIX: Push to ALL riders to verify pipeline linkage
       const nearbyDrivers = await User.find({
         role: { $in: [/^delivery$/i, /^deliveryboy$/i] }
       });
@@ -278,7 +284,7 @@ export const updateSubOrderStatus = async (req, res) => {
           order: updatedMasterOrder._id,
           shop: subOrder.shop,
           shopOrderId: subOrderId,
-          broadcasted: driverIds, // Array check sync optimization
+          broadcasted: driverIds,
           status: "broadcasted"
         });
         await newAssignment.save();
@@ -286,7 +292,6 @@ export const updateSubOrderStatus = async (req, res) => {
 
         if (io) {
           driverIds.forEach(driverId => {
-            console.log(`⚡ Sending Socket event to driver pipeline stream: ${driverId}`);
             io.to(driverId.toString()).emit("newDeliveryJobAvailable", {
               assignmentId: newAssignment._id,
               masterOrderId: updatedMasterOrder._id,
@@ -298,8 +303,6 @@ export const updateSubOrderStatus = async (req, res) => {
             });
           });
         }
-      } else {
-        console.warn("⚠️ Warning: 0 active delivery boy accounts found in the database matching role criteria.");
       }
     }
 
@@ -314,6 +317,8 @@ export const updateSubOrderStatus = async (req, res) => {
     return res.status(500).json({ success: false, message: error.message });
   }
 };
+
+// Rest of file remains identical below...
 
 export const getAvailableJobs = async (req, res) => {
   try {
