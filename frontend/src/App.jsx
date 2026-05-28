@@ -21,6 +21,7 @@ import OwnerOrderPage from './pages/OwnerOrderPage';
 import useUpdateLocation from './hooks/useUpdateLocation';
 import DeliveryBoy from './components/DeliveryBoy';
 import { SocketProvider } from './context/SocketContext';
+import OrderTrackingPage from './pages/OrderTrackingPage';
 
 export const serverUrl = 'http://localhost:8000';
 
@@ -68,8 +69,8 @@ function App() {
     );
   }
 
-  // FIXED: Removed isDeliveryBoy and explicit dashboard checks to let the Navbar render safely for riders
-  const shouldHideNav = hideNavPaths.includes(location.pathname);
+  // UPDATED: Dynamically checks explicit paths OR any URL path starting with your tracking engine route
+  const shouldHideNav = hideNavPaths.includes(location.pathname) || location.pathname.startsWith('/order-tracking');
 
   return (
     <SocketProvider>
@@ -109,6 +110,7 @@ function App() {
         <Route path="/my-orders" element={userData ? <UserOrderPage currentUser={userData} /> : <Navigate to="/signin" />} />
         <Route path="/dashboard/orders" element={userData ? <OwnerOrderPage currentOwnerId={userData?._id} /> : <Navigate to="/signin" />} />
         <Route path="/delivery/dashboard" element={isDeliveryBoy ? <DeliveryBoy /> : <Navigate to="/signin" />} />
+        <Route path="/order-tracking/:masterOrderId/:subOrderId" element={<OrderTrackingPage />} />
 
         <Route path="*" element={<div>404 - Not Found</div>} />
       </Routes>

@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
 import { FaClock, FaUtensils, FaMapMarkerAlt, FaCheckCircle, FaPizzaSlice, FaTruck, FaStoreAlt, FaMap } from 'react-icons/fa';
 
@@ -12,6 +13,9 @@ const UserOrderPage = ({ currentUser }) => {
   
   // Track which master order card has its route map currently visible (Stored as a safe string)
   const [activeMapOrderId, setActiveMapOrderId] = useState(null);
+  
+  // Initialize Router context for redirection routing hooks
+  const navigate = useNavigate();
   
   // Inject background pipeline hook instance
   const { socket } = useSocket();
@@ -64,6 +68,7 @@ const UserOrderPage = ({ currentUser }) => {
       Kitchen: 'bg-orange-50 text-orange-700 border-orange-200 animate-pulse',
       'Driver Assigned': 'bg-blue-50 text-blue-700 border-blue-200',
       'Out for Delivery': 'bg-blue-50 text-blue-700 border-blue-200',
+      'On Way': 'bg-blue-50 text-blue-700 border-blue-200',
       Completed: 'bg-green-50 text-green-700 border-green-200',
       Delivered: 'bg-green-50 text-green-700 border-green-200'
     };
@@ -74,7 +79,7 @@ const UserOrderPage = ({ currentUser }) => {
     const stages = [
       { key: ['Pending'], icon: FaClock, label: 'Placed' },
       { key: ['Preparing', 'Kitchen'], icon: FaPizzaSlice, label: 'Kitchen' },
-      { key: ['Driver Assigned', 'Out for Delivery'], icon: FaTruck, label: 'On Way' },
+      { key: ['Driver Assigned', 'Out for Delivery', 'On Way'], icon: FaTruck, label: 'On Way' },
       { key: ['Completed', 'Delivered'], icon: FaCheckCircle, label: 'Delivered' }
     ];
 
@@ -97,7 +102,7 @@ const UserOrderPage = ({ currentUser }) => {
                 <div 
                   className={`w-10 h-10 rounded-full flex items-center justify-center border-2 transition-all duration-500 ${
                     isFullyDelivered 
-                      ? 'bg-neutral-50 border-neutral-200 text-neutral-400' // Neutralized configuration if true
+                      ? 'bg-neutral-50 border-neutral-200 text-neutral-400' 
                       : isDone 
                         ? 'bg-orange-500 border-orange-500 text-white shadow-md shadow-orange-500/20' 
                         : 'bg-white border-gray-200 text-gray-300'
@@ -146,6 +151,16 @@ const UserOrderPage = ({ currentUser }) => {
           {orders.map((masterOrder) => {
             const currentOrderIdStr = String(masterOrder._id);
             const isMapActive = activeMapOrderId === currentOrderIdStr;
+
+            // 1. Check if any sub-order within this master block is currently in transit
+            const trackableSubOrder = masterOrder.shopOrders?.find(sub => 
+              ['Driver Assigned', 'Out for Delivery', 'On Way'].includes(sub.status)
+            );
+
+            // 2. Check if all items in this order are already finished/delivered
+            const isEverythingDelivered = masterOrder.shopOrders?.every(sub => 
+              ['Completed', 'Delivered'].includes(sub.status)
+            );
 
             return (
               <div key={masterOrder._id} className="bg-white rounded-3xl shadow-sm border border-gray-100 overflow-hidden">
@@ -207,18 +222,33 @@ const UserOrderPage = ({ currentUser }) => {
                     </div>
                     
                     <div className="flex items-center gap-4">
-                      {/* Map Interaction Control Button */}
-                      <button 
-                        onClick={(e) => {
-                          e.preventDefault();
-                          e.stopPropagation();
-                          setActiveMapOrderId(isMapActive ? null : currentOrderIdStr);
-                        }}
-                        className="flex items-center gap-1.5 text-xs font-bold text-orange-600 bg-orange-50 hover:bg-orange-100 px-3 py-1.5 rounded-xl border border-orange-200 transition-colors cursor-pointer select-none relative z-30"
-                      >
-                        <FaMap size={12} />
-                        <span>{isMapActive ? "Close Map Route" : "Open Map Route Direction"}</span>
-                      </button>
+                      
+                      {/* CRITICAL ACTION: Only render map navigation button frames if the order is NOT completely delivered */}
+                      {!isEverythingDelivered && (
+                        <>
+                          {trackableSubOrder ? (
+                            <button 
+                              onClick={() => navigate(`/order-tracking/${masterOrder._id}/${trackableSubOrder._id}`)}
+                              className="flex items-center gap-1.5 text-xs font-bold text-white bg-gradient-to-r from-orange-500 to-red-500 hover:from-orange-600 hover:to-red-600 px-4 py-2 rounded-xl transition-all cursor-pointer select-none relative z-30 shadow-md shadow-orange-500/20 animate-pulse border-none"
+                            >
+                              <FaTruck size={12} className="animate-bounce" />
+                              <span>Track Delivery Boy</span>
+                            </button>
+                          ) : (
+                            <button 
+                              onClick={(e) => {
+                                e.preventDefault();
+                                e.stopPropagation();
+                                setActiveMapOrderId(isMapActive ? null : currentOrderIdStr);
+                              }}
+                              className="flex items-center gap-1.5 text-xs font-bold text-orange-600 bg-orange-50 hover:bg-orange-100 px-3 py-1.5 rounded-xl border border-orange-200 transition-colors cursor-pointer select-none relative z-30"
+                            >
+                              <FaMap size={12} />
+                              <span>{isMapActive ? "Close Map Route" : "Open Map Route Direction"}</span>
+                            </button>
+                          )}
+                        </>
+                      )}
 
                       <div className="text-sm text-gray-800 font-bold">
                         Total Paid: <span className="text-lg font-black text-[#ff4d2d]">₹{masterOrder.totalAmount}</span>
@@ -226,8 +256,8 @@ const UserOrderPage = ({ currentUser }) => {
                     </div>
                   </div>
 
-                  {/* Fixed Map Height Rendering Frame Box Container */}
-                  {isMapActive && (
+                  {/* Fallback inline direction block helper if clicked, not dispatched, and not finished */}
+                  {isMapActive && !trackableSubOrder && !isEverythingDelivered && (
                     <div className="mt-2 w-full min-h-[400px] h-[400px] block bg-white rounded-2xl border border-gray-100 overflow-hidden relative shadow-md">
                       <OrderTrackingMap 
                         customerCoords={[
