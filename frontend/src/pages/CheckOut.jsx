@@ -106,41 +106,58 @@ const CheckOut = () => {
     }
   };
 
-  const handlePlaceOrder = async () => {
-    if (!deliveryAddress?.trim()) return toast.error("Please provide a delivery address");
-    if (!location.lat || !location.lon) {
-      return toast.error("Please locate and pin your address on the map before proceeding.");
+const handlePlaceOrder = async () => {
+  // 1. Validate that the cart isn't empty
+  if (!cartItem || cartItem.length === 0) {
+    return toast.error("Your cart is empty.");
+  }
+
+  // 2. Validate that an address has been set
+  if (!deliveryAddress || deliveryAddress.trim().length < 5) {
+    return toast.error("Please enter a valid delivery address.");
+  }
+
+  setLoading(true);
+  try {
+    // 3. Map values using your EXACT local component variables: cartItem, paymentMethod, and total
+    const orderPayload = {
+      items: cartItem.map(item => ({
+        product: item._id, // Extracts the clean product database item ID
+        quantity: item.quantity
+      })),
+      paymentMethod: paymentMethod, // Uses your local 'COD' or 'Online' state matching your schema
+      deliveryAddress: {
+        text: deliveryAddress, // Passes the text address value
+        lat: location.lat || 19.2812, // Captures map latitude dynamically
+        lon: location.lon || 72.8554  // Captures map longitude dynamically
+      },
+      totalAmount: total // Uses your real combined total (subtotal + deliveryFee)
+    };
+
+    console.log("🚀 Sending clean payload to backend:", orderPayload);
+
+    // 4. Fire API request with credentials support
+   const response = await axios.post("http://localhost:8000/api/orders/place", orderPayload, {
+  withCredentials: true 
+});
+
+    if (response.data.success) {
+      toast.success("Order placed successfully!");
+      
+      // Clear Redux Cart state
+      dispatch(clearCart());
+      
+      // Navigate to the OrderPlaced page you built, passing the order details
+      navigate('/order-placed', { state: { orders: response.data.orders } });
     }
 
-    setLoading(true);
-    try {
-      const orderData = {
-        paymentMethod,
-        deliveryAddress: { 
-          text: deliveryAddress,
-          lat: location.lat,
-          lon: location.lon
-        },
-        items: cartItem.map(item => ({ product: item._id, quantity: item.quantity })),
-        totalAmount: total
-      };
-
-      const response = await axios.post('http://localhost:8000/api/orders/place', orderData, { withCredentials: true });
-
-      if (response.data.success) {
-        toast.success(response.data.message || "Order Placed Successfully!");
-        dispatch(clearCart());
-        
-        // Safely pass down split items collection arrays to the order success routing view state
-        navigate('/order-placed', { state: { orders: response.data.orders } });
-      }
-    } catch (error) {
-      toast.error(error.response?.data?.message || "Order failed");
-    } finally {
-      setLoading(false);
-    }
-  };
-
+  } catch (error) {
+    console.error("Order completion failed:", error);
+    alert(error.response?.data?.message || "Something went wrong while executing checkout.");
+  } finally {
+    setLoading(false);
+  }
+};
   return (
     <div className="min-h-screen bg-gray-50 p-4 md:p-8">
       <div className="max-w-2xl mx-auto bg-white rounded-3xl shadow-sm border border-gray-100 p-6">

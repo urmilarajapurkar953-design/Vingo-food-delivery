@@ -5,20 +5,37 @@ import fs from "fs";
 
 // 1. GET ALL SHOPS (Crucial for UserDashboard)
 // 1. GET ALL SHOPS (Filtered by City)
+// 1. GET ALL SHOPS (Perfectly Filtered by City & Address fallback)
 export const getAllShops = async (req, res) => {
     try {
-        const { city } = req.query; // Get city from URL: ?city=Mumbai
+        const { city } = req.query; // Get city from URL: ?city=Mira-Bhayander
         
         let query = {};
-        if (city && city !== "your area") {
-            // Using regex for case-insensitive matching
-            query.city = { $regex: new RegExp(city, "i") };
+        
+        // Safely validate that a genuine city query value exists
+        if (
+            city && 
+            city.trim() !== "" && 
+            city !== "your area" && 
+            city !== "undefined" && 
+            city !== "null"
+        ) {
+            const searchRegex = new RegExp(city.trim(), "i");
+            
+            // 🔥 THE FIX: Search across both 'city' AND 'address' fields so it doesn't return empty!
+            query = {
+                $or: [
+                    { city: searchRegex },
+                    { address: searchRegex }
+                ]
+            };
         }
 
         const shops = await Shop.find(query).populate("owner items");
         return res.status(200).json(shops);
     } catch (error) {
-        res.status(500).json({ message: error.message });
+        console.error("Error fetching shops:", error);
+        return res.status(500).json({ message: error.message });
     }
 };
 

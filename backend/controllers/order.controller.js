@@ -4,7 +4,9 @@ import Shop from "../models/shop.model.js";
 import User from "../models/user.model.js";
 import DeliveryAssignment from "../models/deliveryAssignment.model.js";
 
+// ==========================================
 // 1. PLACE ORDER
+// ==========================================
 export const placeOrder = async (req, res) => {
   try {
     const { items, paymentMethod, deliveryAddress, totalAmount } = req.body;
@@ -90,6 +92,7 @@ export const placeOrder = async (req, res) => {
         shop: shopId,
         owner: trueShopOwnerId, 
         subTotal: shopSubtotal,
+        status: "Pending",
         shopOrderItems: shopOrderItems.map(oi => ({
           item: oi.item,
           price: oi.price,
@@ -161,28 +164,65 @@ export const placeOrder = async (req, res) => {
   }
 };
 
+// ==========================================
 // 2. GET USER ORDERS
+// ==========================================
 export const getUserOrders = async (req, res) => {
   try {
     const userId = req.user?._id;
-    const orders = await Order.find({ user: userId })
-      .populate({
-        path: "shopOrders.shop",
-        select: "name image"
-      })
-      .populate({
-        path: "shopOrders.shopOrderItems.item",
-        select: "name image price"
-      })
-      .sort({ createdAt: -1 });
+    if (!userId) {
+      return res.status(401).json({ success: false, message: "User session not authenticated." });
+    }
 
-    return res.status(200).json({ success: true, orders });
+    const rawOrders = await Order.find({ user: userId })
+      .populate({ path: "shopOrders.shop", select: "name image address text city" })
+      .populate({ path: "shopOrders.shopOrderItems.item", select: "name image price" })
+      .sort({ createdAt: -1 })
+      .lean();
+
+    const driverIds = [];
+    rawOrders.forEach(order => {
+      order.shopOrders?.forEach(sub => {
+        if (sub.deliveryBoy) {
+          driverIds.push(sub.deliveryBoy.toString());
+        }
+      });
+    });
+
+    const drivers = await User.find({ _id: { $in: driverIds } })
+      .select("fullName name email phone role currentLocation")
+      .lean();
+
+    const driverMap = {};
+    drivers.forEach(d => {
+      driverMap[d._id.toString()] = d;
+    });
+
+    const processedOrders = rawOrders.map(order => {
+      if (order.shopOrders) {
+        order.shopOrders = order.shopOrders.map(sub => {
+          if (sub.deliveryBoy && driverMap[sub.deliveryBoy.toString()]) {
+            sub.deliveryBoy = driverMap[sub.deliveryBoy.toString()];
+          } else {
+            sub.deliveryBoy = null;
+          }
+          return sub;
+        });
+      }
+      return order;
+    });
+
+    return res.status(200).json({ success: true, orders: processedOrders });
+
   } catch (error) {
+    console.error("💥 Error inside getUserOrders API:", error);
     return res.status(500).json({ success: false, message: error.message });
   }
 };
 
+// ==========================================
 // 3. GET OWNER SHOP ORDERS
+// ==========================================
 export const getOwnerShopOrders = async (req, res) => {
   try {
     const ownerId = req.user?._id;
@@ -225,15 +265,14 @@ export const getOwnerShopOrders = async (req, res) => {
   }
 };
 
-
-// Rest of file remains identical above...
-
+// ==========================================
+// 4. UPDATE SUB-ORDER STATUS
+// ==========================================
 export const updateSubOrderStatus = async (req, res) => {
   try {
     const { masterOrderId, subOrderId, status } = req.body;
     console.log(`📦 Incoming Status Change: Master [${masterOrderId}] | Sub [${subOrderId}] -> "${status}"`);
     
-    // ✨ ADDED: Enforce strict restaurant boundaries. Prevent owners from skipping to delivery completion.
     const allowedMerchantStatuses = ["Pending", "Preparing", "Out for Delivery"];
     if (!allowedMerchantStatuses.includes(status)) {
       return res.status(400).json({
@@ -249,13 +288,11 @@ export const updateSubOrderStatus = async (req, res) => {
     ).populate("user", "fullName email phone");
 
     if (!updatedMasterOrder) {
-      console.error("❌ Master Order document could not be found or updated.");
       return res.status(404).json({ success: false, message: "Order element not found." });
     }
 
     const subOrder = updatedMasterOrder.shopOrders.id(subOrderId);
     if (!subOrder) {
-      console.error("❌ Sub-order segment matching ID was missing.");
       return res.status(404).json({ success: false, message: "Sub-order details not found." });
     }
 
@@ -264,9 +301,10 @@ export const updateSubOrderStatus = async (req, res) => {
     const io = req.app.get("io");
     if (io) {
       io.to(updatedMasterOrder.user._id.toString()).emit("orderStatusUpdated", {
-        masterOrderId: updatedMasterOrder._id,
-        subOrderId: subOrderId,
-        newStatus: status
+        masterOrderId: updatedMasterOrder._id.toString(),
+        subOrderId: subOrderId.toString(),
+        newStatus: status,
+        deliveryBoy: null
       });
     }
 
@@ -294,8 +332,8 @@ export const updateSubOrderStatus = async (req, res) => {
           driverIds.forEach(driverId => {
             io.to(driverId.toString()).emit("newDeliveryJobAvailable", {
               assignmentId: newAssignment._id,
-              masterOrderId: updatedMasterOrder._id,
-              subOrderId: subOrderId,
+              masterOrderId: updatedMasterOrder._id.toString(),
+              subOrderId: subOrderId.toString(),
               shopName: activeShop?.name || "Local Kitchen",
               shopAddress: activeShop?.text || activeShop?.address || "Store Address",
               deliveryAddress: updatedMasterOrder.deliveryAddress,
@@ -318,42 +356,51 @@ export const updateSubOrderStatus = async (req, res) => {
   }
 };
 
-// Rest of file remains identical below...
-
+// ==========================================
+// 5. GET AVAILABLE JOBS FOR DELIVERY BOYS
+// ==========================================
 export const getAvailableJobs = async (req, res) => {
   try {
-    const driverId = req.user?._id;
-    console.log("🔍 Checking initialized job feed for Driver ID:", driverId);
+    // Find all orders where at least one sub-order is marked as "Out for Delivery"
+    const activeOrders = await Order.find({
+      "shopOrders.status": "Out for Delivery"
+    })
+    .populate("user", "fullName name email phone")
+    .populate({
+      path: "shopOrders.shop",
+      select: "name image text address city"
+    })
+    .populate({
+      path: "shopOrders.shopOrderItems.item",
+      select: "name price image"
+    })
+    .lean();
 
-    if (!driverId) {
-      return res.status(401).json({ success: false, message: "Unauthorized: No driver ID found in session tokens." });
-    }
+    const broadcastedJobs = [];
 
-    // DEBUG: Look up assignments ignoring status to see if the driver is listed in the broadcast array at all
-    const allAssignmentsForMe = await DeliveryAssignment.find({
-      broadcasted: driverId
+    // Filter out only the sub-orders that actually need a driver
+    activeOrders.forEach((masterOrder) => {
+      masterOrder.shopOrders.forEach((subOrder) => {
+        if (subOrder.status === "Out for Delivery" && !subOrder.deliveryBoy) {
+          broadcastedJobs.push({
+            masterOrderId: masterOrder._id,
+            subOrderId: subOrder._id,
+            customer: masterOrder.user,
+            deliveryAddress: masterOrder.deliveryAddress,
+            paymentMethod: masterOrder.paymentMethod,
+            status: subOrder.status,
+            shop: subOrder.shop,
+            items: subOrder.shopOrderItems,
+            subTotal: subOrder.subTotal,
+            createdAt: masterOrder.createdAt
+          });
+        }
+      });
     });
-    console.log(`📡 Database Check: Found total ${allAssignmentsForMe.length} assignments linked to this driver ID in history.`);
 
-    // Find active jobs
-    const activeAssignments = await DeliveryAssignment.find({
-      broadcasted: driverId,
-      status: "broadcasted"
-    }).populate("shop").populate("order");
-
-    const formattedJobs = activeAssignments.map(job => ({
-      assignmentId: job._id,
-      masterOrderId: job.order?._id,
-      subOrderId: job.shopOrderId,
-      shopName: job.shop?.name,
-      shopAddress: job.shop?.text || job.shop?.address,
-      deliveryAddress: job.order?.deliveryAddress,
-      subTotal: job.order?.shopOrders?.find(so => so._id.toString() === job.shopOrderId.toString())?.subTotal || 0
-    }));
-
-    return res.status(200).json({ success: true, jobs: formattedJobs });
+    return res.status(200).json({ success: true, jobs: broadcastedJobs });
   } catch (error) {
-    console.error("❌ Error inside getAvailableJobs API endpoint:", error);
+    console.error("Error in getAvailableJobs:", error);
     return res.status(500).json({ success: false, message: error.message });
   }
-};
+};    
