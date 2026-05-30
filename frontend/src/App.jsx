@@ -74,7 +74,19 @@ function App() {
 
   return (
     <SocketProvider>
-      <Toaster />
+      {/* 🌟 FIXED: Custom styles injected to push alerts below your navigation bar */}
+      <Toaster 
+        position="top-center"
+        containerStyle={{
+          top: 95,          // Clear the navbar height cleanly 
+          zIndex: 999999,   // Force stacking priority order over components
+        }}
+        toastOptions={{
+          style: {
+            zIndex: 999999, // Ensure individual toast blocks carry the layout override
+          }
+        }}
+      />
       
       {userData && !shouldHideNav && <Nav />} 
 

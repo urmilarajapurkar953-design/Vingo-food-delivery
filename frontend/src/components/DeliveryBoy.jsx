@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useSocket } from '../context/SocketContext';
-import { FaMapMarkerAlt, FaStore, FaMoneyBillWave, FaClock, FaShippingFast, FaMap } from 'react-icons/fa';
+import { FaMapMarkerAlt, FaStore, FaMoneyBillWave, FaClock, FaShippingFast, FaMap, FaLock, FaUndo, FaTimes } from 'react-icons/fa';
 import { useSelector } from 'react-redux'; 
 import axios from 'axios';
 import { serverUrl } from '../App';
@@ -12,6 +12,11 @@ const DeliveryBoy = () => {
   const [activeDelivery, setActiveDelivery] = useState(null);
   const [loadingId, setLoadingId] = useState(null);
   const [completing, setCompleting] = useState(false); 
+
+  // 🔒 SECURE DOORSTEP OTP FLOW STATE FIELDS
+  const [showOtpModal, setShowOtpModal] = useState(false);
+  const [otpInput, setOtpInput] = useState('');
+  const [resending, setResending] = useState(false);
 
   const { userData, loading } = useSelector((state) => state.user || {});
   const driverId = userData?._id;
@@ -58,7 +63,6 @@ const DeliveryBoy = () => {
   useEffect(() => {
     if (!activeDelivery) return;
 
-    // Track movement silently in the background
     const watchId = navigator.geolocation.watchPosition(
       (position) => {
         const { latitude, longitude } = position.coords;
@@ -72,7 +76,6 @@ const DeliveryBoy = () => {
         }
       },
       (error) => {
-        // Silenced repeated runtime error fallback notifications completely
         console.log("Telemetry engine background ping mode enabled.");
       },
       {
@@ -110,22 +113,61 @@ const DeliveryBoy = () => {
     }
   };
 
-  const handleCompleteDelivery = async () => {
+  // =========================================================================
+  // 🔑 PHASE 1: DISPATCH TIME-SENSITIVE SECURITY OTP TO USER EMAIL
+  // =========================================================================
+  const handleInitiateDropoff = async (isResend = false) => {
     if (!activeDelivery) return;
-    setCompleting(true);
+    
+    if (isResend) setResending(true);
+    else setCompleting(true);
+
     try {
-      const response = await axios.post(`${serverUrl}/api/delivery/complete-delivery`, 
+      const response = await axios.post(`${serverUrl}/api/delivery/send-otp`, 
         { assignmentId: activeDelivery.assignmentId },
         { withCredentials: true }
       );
 
       if (response.data.success) {
-        toast.success("Delivery completed successfully! Great job.");
-        setActiveDelivery(null); 
+        toast.success(isResend ? "New code sent to customer email!" : "Verification pin sent to customer!");
+        setShowOtpModal(true);
       }
     } catch (error) {
-      console.error("Failed to complete delivery route:", error);
-      toast.error(error.response?.data?.message || "Error processing delivery drop-off confirmation.");
+      console.error("Failed to route token drop-off trigger:", error);
+      toast.error(error.response?.data?.message || "Error processing delivery verification request.");
+    } finally {
+      setCompleting(false);
+      setResending(false);
+    }
+  };
+
+  // =========================================================================
+  // 🔒 PHASE 2: SUBMIT INPUT PIN AND COMPLETE DELIVERY LIFECYCLE
+  // =========================================================================
+  const handleVerifyOtpAndComplete = async (e) => {
+    e.preventDefault();
+    if (!activeDelivery) return;
+    if (otpInput.length !== 6) return toast.error("Please provide the complete 6-digit pin.");
+
+    setCompleting(true);
+    try {
+      const response = await axios.post(`${serverUrl}/api/delivery/verify-otp`, 
+        { 
+          assignmentId: activeDelivery.assignmentId,
+          inputOTP: otpInput
+        },
+        { withCredentials: true }
+      );
+
+      if (response.data.success) {
+        toast.success("Doorstep OTP verified! Order completed successfully.");
+        setShowOtpModal(false);
+        setOtpInput('');
+        setActiveDelivery(null); // Clean workspace context for next job
+      }
+    } catch (error) {
+      console.error("Validation submission crash:", error);
+      toast.error(error.response?.data?.message || "Invalid validation token code.");
     } finally {
       setCompleting(false);
     }
@@ -285,10 +327,10 @@ const DeliveryBoy = () => {
                   
                   <button 
                     disabled={completing}
-                    onClick={handleCompleteDelivery} 
+                    onClick={() => handleInitiateDropoff(false)} 
                     className="w-full bg-emerald-500 text-white text-xs font-bold py-2.5 rounded-lg hover:bg-emerald-600 disabled:bg-gray-300 transition-all shadow-md flex items-center justify-center cursor-pointer"
                   >
-                    {completing ? 'Closing Run...' : 'Confirm Drop-off / Complete Run'}
+                    {completing ? 'Sending OTP...' : 'Confirm Drop-off / Complete Run'}
                   </button>
                 </div>
               </div>
@@ -297,6 +339,70 @@ const DeliveryBoy = () => {
         </div>
 
       </div>
+
+      {/* =========================================================================
+      // 🔒 SECURE INTERACTIVE DOORSTEP OTP OVERLAY SHEET MODAL LAYER
+      // ========================================================================= */}
+      {showOtpModal && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-fade-in">
+          <div className="bg-white rounded-[2rem] max-w-md w-full p-6 md:p-8 text-center shadow-2xl relative border border-gray-50">
+            
+            <button 
+              onClick={() => { setShowOtpModal(false); setOtpInput(''); }}
+              className="absolute top-5 right-5 text-gray-400 hover:text-gray-600 transition-colors"
+            >
+              <FaTimes size={16} />
+            </button>
+
+            <div className="w-14 h-14 bg-orange-50 text-[#ff4d2d] rounded-full flex items-center justify-center mx-auto mb-4 text-xl">
+              <FaLock />
+            </div>
+            
+            <h3 className="text-xl font-black text-gray-900 mb-1">Doorstep Code Verification</h3>
+            <p className="text-xs text-gray-500 max-w-xs mx-auto mb-6">
+              Ask the customer for the 6-digit verification code sent directly to their registered email profile box.
+            </p>
+
+            <form onSubmit={handleVerifyOtpAndComplete} className="space-y-4">
+              <input
+                type="text"
+                maxLength="6"
+                placeholder="••••••"
+                value={otpInput}
+                onChange={(e) => setOtpInput(e.target.value.replace(/\D/g, ""))} // Numbers only guard
+                className="w-full text-center text-2xl font-black tracking-[12px] bg-gray-50 border-2 border-gray-100 focus:border-[#ff4d2d] focus:bg-white rounded-2xl p-3.5 outline-none transition-all"
+                autoFocus
+              />
+
+              <button
+                type="submit"
+                disabled={completing || otpInput.length !== 6}
+                className="w-full bg-[#ff4d2d] hover:bg-[#e64429] text-white py-3.5 rounded-xl font-bold transition-all disabled:bg-gray-200 disabled:text-gray-400 shadow-md text-sm cursor-pointer"
+              >
+                {completing ? "Verifying Token..." : "Unlock & Release Order"}
+              </button>
+            </form>
+
+            <div className="flex justify-between items-center mt-6 pt-4 border-t border-gray-100 text-xs">
+              <button 
+                type="button"
+                disabled={resending}
+                onClick={() => handleInitiateDropoff(true)}
+                className="text-gray-500 hover:text-gray-800 font-bold flex items-center gap-1.5 transition-colors disabled:text-gray-300"
+              >
+                <FaUndo className={resending ? "animate-spin" : ""} /> {resending ? "Sending..." : "Resend PIN"}
+              </button>
+              <button 
+                type="button"
+                onClick={() => { setShowOtpModal(false); setOtpInput(''); }}
+                className="text-red-400 hover:text-red-600 font-medium transition-colors"
+              >
+                Cancel 
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

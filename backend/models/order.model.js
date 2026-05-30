@@ -46,6 +46,22 @@ const shopOrderSchema = new mongoose.Schema({
         enum: ["Pending", "Preparing", "Driver Assigned", "Out for Delivery", "Completed", "Delivered"],
         default: "Pending"
     },
+    status: {
+        type: String,
+        enum: ["Pending", "Preparing", "Driver Assigned", "Out for Delivery", "Completed", "Delivered"],
+        default: "Pending"
+    },
+    shopOrderItems: [shopOrderItemSchema],
+
+    // 🌟 ADD THESE CODE FIELDS HERE FOR DOORSTEP VERIFICATION
+    deliveryOTP: {
+        type: String,
+        default: null
+    },
+    deliveryOTPExpires: {
+        type: Date,
+        default: null
+    },
     shopOrderItems: [shopOrderItemSchema]
 }, {
     timestamps: true
