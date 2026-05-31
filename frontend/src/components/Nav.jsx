@@ -4,7 +4,7 @@ import { IoIosSearch, IoIosClose } from 'react-icons/io';
 import { FiShoppingCart } from 'react-icons/fi';
 import { LuLayoutList } from "react-icons/lu"; 
 import { useSelector, useDispatch } from 'react-redux'; 
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom'; // 🌟 Added useSearchParams
 import axios from 'axios';
 import { setUserData } from '../redux/user.Slice'; 
 import { serverUrl } from '../App'; 
@@ -21,6 +21,20 @@ function Nav() {
   
   const [showInfo, setShowInfo] = useState(false);
   const [isMobileSearchOpen, setIsMobileSearchOpen] = useState(false); 
+  
+  // 🌟 Sync local typing changes to URL search query parameters globally
+  const [searchParams, setSearchParams] = useSearchParams();
+  const searchVal = searchParams.get('search') || "";
+
+  const handleSearchChange = (e) => {
+    const value = e.target.value;
+    if (value) {
+      setSearchParams({ search: value });
+    } else {
+      searchParams.delete('search');
+      setSearchParams(searchParams);
+    }
+  };
   
   const dispatch = useDispatch(); 
   const navigate = useNavigate();
@@ -56,7 +70,15 @@ function Nav() {
         <div className='absolute inset-0 bg-[#fff9f6] z-[10000] flex items-center px-4'>
             <div className='flex items-center bg-white border border-gray-200 rounded-full px-4 py-2 w-full shadow-md'>
                 <IoIosSearch size={22} className='text-gray-400' />
-                <input autoFocus type="text" placeholder="Search for food..." className='bg-transparent outline-none w-full ml-2 text-gray-700' />
+                {/* 🌟 Linked Mobile Search Input */}
+                <input 
+                  autoFocus 
+                  type="text" 
+                  value={searchVal}
+                  onChange={handleSearchChange}
+                  placeholder="Search for food..." 
+                  className='bg-transparent outline-none w-full ml-2 text-gray-700' 
+                />
                 <IoIosClose size={28} className='text-gray-500 cursor-pointer' onClick={() => setIsMobileSearchOpen(false)} />
             </div>
         </div>
@@ -97,7 +119,14 @@ function Nav() {
       {!isOwner && !isDelivery && (
         <div className='hidden md:flex items-center bg-white border border-gray-200 rounded-full px-5 py-3 w-full max-w-[450px] lg:max-w-[600px] shadow-sm'>
           <IoIosSearch size={24} className='text-gray-400 mr-2' />
-          <input type="text" placeholder="Search for food, restaurants or cuisines..." className='bg-transparent outline-none w-full text-[15px] text-gray-700' />
+          {/* 🌟 Linked Desktop Search Input */}
+          <input 
+            type="text" 
+            value={searchVal}
+            onChange={handleSearchChange}
+            placeholder="Search for food, restaurants or cuisines..." 
+            className='bg-transparent outline-none w-full text-[15px] text-gray-700' 
+          />
         </div>
       )}
 

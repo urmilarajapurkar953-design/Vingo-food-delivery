@@ -6,12 +6,17 @@ import axios from 'axios';
 import { useSelector, useDispatch } from 'react-redux'; 
 import { serverUrl } from '../App'; 
 import { addToCart, decrementQuantity } from '../redux/user.Slice.js'; 
-// 🌟 Import useNavigate for navigation to the specific shop details page
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 
 function UserDashboard() {
   const scrollRef = useRef(null);
-  const navigate = useNavigate(); // 🌟 Router hook initialized
+  const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  
+  // 🌟 FIXED: Safely extract search query without letting it turn into a "null" string
+  const rawSearch = searchParams.get('search');
+  const searchQuery = (rawSearch && rawSearch !== "null") ? rawSearch.toLowerCase().trim() : "";
+
   const [showLeft, setShowLeft] = useState(false);
   const [showRight, setShowRight] = useState(true);
   const [allShops, setAllShops] = useState([]);
@@ -79,6 +84,7 @@ function UserDashboard() {
   // Fetch Items logic
   useEffect(() => {
     const fetchItems = async () => {
+      if (!currentCity) return;
       setItemsLoading(true);
       try {
         const response = await axios.get(`${serverUrl}/api/item/city-items`, {
@@ -94,10 +100,19 @@ function UserDashboard() {
     fetchItems();
   }, [currentCity]);
 
-  // Filters down items dynamically based on selection match
-  const filteredItems = selectedCategory
+  // 🌟 FIXED STEP 1: Filter location-bound items by active Category Selection safely
+  let filteredItems = (selectedCategory && selectedCategory !== "null")
     ? suggestedItems.filter(item => item.category?.toLowerCase() === selectedCategory.toLowerCase())
     : suggestedItems;
+
+  // 🌟 FIXED STEP 2: Filter location-bound items by Navbar Search Input text safely
+  if (searchQuery) {
+    filteredItems = filteredItems.filter(item => 
+      item.name?.toLowerCase().includes(searchQuery) || 
+      item.category?.toLowerCase().includes(searchQuery) ||
+      item.shop?.name?.toLowerCase().includes(searchQuery)
+    );
+  }
 
   return (
     <div className='w-full flex flex-col gap-8 items-center bg-[#fff9f6] pb-20 px-4 pt-20'>
@@ -108,7 +123,7 @@ function UserDashboard() {
           <h1 className='text-gray-800 text-2xl font-bold'>Inspiration for your first order</h1>
           
           {/* Clear Filter Indicator button block */}
-          {selectedCategory && (
+          {selectedCategory && selectedCategory !== "null" && (
             <button 
               onClick={() => setSelectedCategory(null)}
               className="flex items-center gap-1.5 text-xs font-bold text-[#ff4d2d] bg-orange-50 px-3 py-1.5 rounded-full hover:bg-orange-100 transition-colors"
@@ -157,7 +172,6 @@ function UserDashboard() {
             <p className="col-span-full text-center py-10 italic text-gray-400">Finding delicious spots...</p>
           ) : allShops.length > 0 ? (
             allShops.map((shop) => (
-              // 🌟 Added dynamic redirection navigation mapping to shop template detail page
               <div 
                 key={shop._id} 
                 onClick={() => navigate(`/shop/${shop._id}`)} 
@@ -185,7 +199,10 @@ function UserDashboard() {
       {/* SUGGESTED ITEMS GRID */}
       <div className="w-full max-w-6xl">
         <h1 className='text-gray-800 text-2xl font-bold mb-6 flex items-center gap-2'>
-          {selectedCategory ? `${selectedCategory} Options` : "Suggested items"}
+          {searchQuery 
+            ? `Search results for "${searchQuery}" near ${currentCity || 'you'}` 
+            : (selectedCategory && selectedCategory !== "null") ? `${selectedCategory} Options` : "Suggested items"
+          }
         </h1>
         <div className='grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6'>
           {itemsLoading ? (
@@ -251,7 +268,10 @@ function UserDashboard() {
             })
           ) : (
             <p className="col-span-full text-center py-12 text-gray-400 text-sm">
-              No menu items listed under "{selectedCategory}" in this city area yet.
+              {searchQuery 
+                ? `No items found matching "${searchQuery}" within ${currentCity || 'your local area'}.`
+                : `No menu items listed in this city area yet.`
+              }
             </p>
           )}
         </div>
