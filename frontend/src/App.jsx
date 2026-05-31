@@ -22,6 +22,7 @@ import useUpdateLocation from './hooks/useUpdateLocation';
 import DeliveryBoy from './components/DeliveryBoy';
 import { SocketProvider } from './context/SocketContext';
 import OrderTrackingPage from './pages/OrderTrackingPage';
+import ShopDetails from './components/ShopDetails'; 
 
 export const serverUrl = 'http://localhost:8000';
 
@@ -123,6 +124,7 @@ function App() {
         <Route path="/dashboard/orders" element={userData ? <OwnerOrderPage currentOwnerId={userData?._id} /> : <Navigate to="/signin" />} />
         <Route path="/delivery/dashboard" element={isDeliveryBoy ? <DeliveryBoy /> : <Navigate to="/signin" />} />
         <Route path="/order-tracking/:masterOrderId/:subOrderId" element={<OrderTrackingPage />} />
+        <Route path="/shop/:shopId" element={<ShopDetails />} />
 
         <Route path="*" element={<div>404 - Not Found</div>} />
       </Routes>
