@@ -4,7 +4,7 @@ import { IoIosSearch, IoIosClose } from 'react-icons/io';
 import { FiShoppingCart } from 'react-icons/fi';
 import { LuLayoutList } from "react-icons/lu"; 
 import { useSelector, useDispatch } from 'react-redux'; 
-import { useNavigate, useSearchParams } from 'react-router-dom'; // 🌟 Added useSearchParams
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import axios from 'axios';
 import { setUserData } from '../redux/user.Slice'; 
 import { serverUrl } from '../App'; 
@@ -22,22 +22,21 @@ function Nav() {
   const [showInfo, setShowInfo] = useState(false);
   const [isMobileSearchOpen, setIsMobileSearchOpen] = useState(false); 
   
-  // 🌟 Sync local typing changes to URL search query parameters globally
-  const [searchParams, setSearchParams] = useSearchParams();
+  const [searchParams] = useSearchParams();
   const searchVal = searchParams.get('search') || "";
-
-  const handleSearchChange = (e) => {
-    const value = e.target.value;
-    if (value) {
-      setSearchParams({ search: value });
-    } else {
-      searchParams.delete('search');
-      setSearchParams(searchParams);
-    }
-  };
   
   const dispatch = useDispatch(); 
   const navigate = useNavigate();
+
+  // 🌟 UPDATED: Pushes live text entry string onto the standalone global search route setup layout
+  const handleSearchChange = (e) => {
+    const value = e.target.value;
+    if (value) {
+      navigate(`/search?search=${encodeURIComponent(value)}`);
+    } else {
+      navigate('/');
+    }
+  };
 
   const totalCartItems = cartItem?.reduce((acc, item) => acc + item.quantity, 0) || 0;
 
@@ -70,7 +69,6 @@ function Nav() {
         <div className='absolute inset-0 bg-[#fff9f6] z-[10000] flex items-center px-4'>
             <div className='flex items-center bg-white border border-gray-200 rounded-full px-4 py-2 w-full shadow-md'>
                 <IoIosSearch size={22} className='text-gray-400' />
-                {/* 🌟 Linked Mobile Search Input */}
                 <input 
                   autoFocus 
                   type="text" 
@@ -86,7 +84,6 @@ function Nav() {
 
       {/* --- LEFT: LOGO & LOCATION --- */}
       <div className='flex items-center gap-4 md:gap-8'>
-        {/* ADDED: flex items-center gap-2 container layout wrapper to sit logo and badge inline cleanly */}
         <div className='flex items-center gap-2'>
           <h1 
             className='text-2xl md:text-3xl font-bold text-[#ff4d2d] cursor-pointer'
@@ -95,7 +92,7 @@ function Nav() {
             Vingo
           </h1>
           
-          {/* ADDED: Conditional inline Rider badge matching your design layout system */}
+          {/* Conditional inline Rider badge matching design layout system */}
           {isDelivery && (
             <span className="text-[11px] font-bold bg-orange-100 text-[#ff4d2d] px-2 py-0.5 rounded shadow-sm select-none">
               Rider
@@ -119,7 +116,6 @@ function Nav() {
       {!isOwner && !isDelivery && (
         <div className='hidden md:flex items-center bg-white border border-gray-200 rounded-full px-5 py-3 w-full max-w-[450px] lg:max-w-[600px] shadow-sm'>
           <IoIosSearch size={24} className='text-gray-400 mr-2' />
-          {/* 🌟 Linked Desktop Search Input */}
           <input 
             type="text" 
             value={searchVal}
@@ -218,8 +214,7 @@ function Nav() {
                 </div>
                 <div className='h-[1px] bg-gray-100 w-full'></div>
                 
-                {/* --- RESPONSIVE DROPDOWN LINK INCLUSIONS --- */}
-                {/* Track orders text dropdown option hidden automatically if Delivery Boy */}
+                {/* Track orders dropdown link layout option hidden automatically if Delivery Boy */}
                 {!isOwner && !isDelivery && (
                   <button 
                     onClick={() => { navigate('/my-orders'); setShowInfo(false); }}

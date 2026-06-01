@@ -23,6 +23,7 @@ import DeliveryBoy from './components/DeliveryBoy';
 import { SocketProvider } from './context/SocketContext';
 import OrderTrackingPage from './pages/OrderTrackingPage';
 import ShopDetails from './components/ShopDetails'; 
+import SearchPage from './components/SearchPage';
 
 export const serverUrl = 'http://localhost:8000';
 
@@ -125,6 +126,7 @@ function App() {
         <Route path="/delivery/dashboard" element={isDeliveryBoy ? <DeliveryBoy /> : <Navigate to="/signin" />} />
         <Route path="/order-tracking/:masterOrderId/:subOrderId" element={<OrderTrackingPage />} />
         <Route path="/shop/:shopId" element={<ShopDetails />} />
+        <Route path="/search" element={<SearchPage />} />
 
         <Route path="*" element={<div>404 - Not Found</div>} />
       </Routes>
