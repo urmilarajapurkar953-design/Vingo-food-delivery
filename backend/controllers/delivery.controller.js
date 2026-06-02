@@ -26,9 +26,29 @@ export const acceptDeliveryJob = async (req, res) => {
       return res.status(401).json({ success: false, message: "Unauthorized: Driver session missing." });
     }
 
-    const assignment = await DeliveryAssignment.findById(assignmentId);
+    // 🌟 BULLETPROOF LOOKUP: Match raw inputs, converted strings, or loose fallback fields
+    let assignment = await DeliveryAssignment.findOne({
+      $or: [
+        { _id: assignmentId },
+        { shopOrderId: assignmentId },
+        { shopOrderId: assignmentId?.toString() },
+        { order: assignmentId }
+      ]
+    });
+
+    // Final loose safeguard using RegExp query if document still yields empty outcomes
+    if (!assignment && assignmentId) {
+      assignment = await DeliveryAssignment.findOne({
+        shopOrderId: { $regex: new RegExp("^" + assignmentId + "$", "i") }
+      });
+    }
+
     if (!assignment) {
-      return res.status(404).json({ success: false, message: "Delivery assignment not found." });
+      console.error("❌ BACKEND ROUTE CRASH: No matching assignment found in DB for ID:", assignmentId);
+      return res.status(404).json({ 
+        success: false, 
+        message: "Delivery job mapping record not found in database." 
+      });
     }
 
     if (assignment.status === "assigned" || assignment.assignedTo) {
@@ -55,10 +75,27 @@ export const acceptDeliveryJob = async (req, res) => {
     ).lean();
 
     if (!updatedOrder) {
-      return res.status(404).json({ success: false, message: "Order not found." });
+      return res.status(404).json({ success: false, message: "Order tracking context not found." });
     }
 
     const driverProfile = await User.findById(driverId).select("name fullName phone email role currentLocation").lean();
+
+    // 🌟 DATA INTEGRITY ALIGNMENT: Include nested shop parameters to fix "Missing Address" frontend bugs
+    const formattedAssignment = {
+      assignmentId: assignment._id.toString(),
+      orderId: assignment.order.toString(),
+      shopOrderId: assignment.shopOrderId.toString(),
+      shopName: assignment.shopName || "Partner Store",
+      shopAddress: assignment.shopAddress || "Address details missing",
+      deliveryAddress: assignment.deliveryAddress,
+      subTotal: assignment.subTotal || 0,
+      status: assignment.status,
+      // Pass the shop wrapper cleanly so your frontend can safely parse shop?.address
+      shop: {
+        name: assignment.shopName || "Partner Store",
+        address: assignment.shopAddress || "Address details missing"
+      }
+    };
 
     const io = req.app.get("io");
     if (io) {
@@ -79,7 +116,11 @@ export const acceptDeliveryJob = async (req, res) => {
       });
     }
 
-    return res.status(200).json({ success: true, message: "Job accepted successfully!", assignment });
+    return res.status(200).json({ 
+      success: true, 
+      message: "Job accepted successfully!", 
+      assignment: formattedAssignment 
+    });
 
   } catch (error) {
     console.error("Crash in acceptDeliveryJob:", error);
@@ -92,7 +133,8 @@ export const acceptDeliveryJob = async (req, res) => {
 // ==========================================
 export const sendDeliveryOTP = async (req, res) => {
   try {
-    const { assignmentId } = req.body;
+    // 🌟 FIX: Allow fallback to look for fallback properties if passed
+    const assignmentId = req.body.assignmentId || req.body._id;
     const driverId = req.user?._id;
 
     // 1. Fetch assignment context records cleanly
@@ -158,10 +200,11 @@ export const sendDeliveryOTP = async (req, res) => {
 // ==========================================
 export const verifyDeliveryOTP = async (req, res) => {
   try {
-    const { assignmentId, inputOTP } = req.body;
+    // 🌟 1. Fallback lookup for assignmentId to make sure it reads properly
+    const assignmentId = req.body.assignmentId || req.body._id;
+    const { inputOTP } = req.body; 
     const driverId = req.user?._id;
 
-    // 1. Fetch assignment blocks validation controls
     const assignment = await DeliveryAssignment.findById(assignmentId);
     if (!assignment) {
       return res.status(404).json({ success: false, message: "Assignment context not found." });
@@ -171,7 +214,6 @@ export const verifyDeliveryOTP = async (req, res) => {
       return res.status(403).json({ success: false, message: "Unauthorized run update access." });
     }
 
-    // 2. Fetch master order context to process inputs
     const order = await Order.findById(assignment.order);
     if (!order) {
       return res.status(404).json({ success: false, message: "Master order context not found." });
@@ -182,47 +224,28 @@ export const verifyDeliveryOTP = async (req, res) => {
       return res.status(404).json({ success: false, message: "Sub-order link missing." });
     }
 
-    // 3. Defensive security pattern checks on OTP strings
-    if (!shopOrder.deliveryOTP || shopOrder.deliveryOTP !== inputOTP) {
+    // 🌟 2. DOUBLE-CHECK THIS LINE: Ensure you compare shopOrder.deliveryOTP with inputOTP
+    if (!shopOrder.deliveryOTP || shopOrder.deliveryOTP !== String(inputOTP)) {
       return res.status(400).json({ success: false, message: "Invalid verification code entered. Please ask customer to re-check." });
     }
 
     if (new Date() > new Date(shopOrder.deliveryOTPExpires)) {
-      return res.status(400).json({ success: false, message: "The verification code has expired. Please hit 'Resend Code' to request a new token." });
+      return res.status(400).json({ success: false, message: "The verification code has expired. Please hit 'Resend Code'." });
     }
 
-    // 4. Verification passing path: clear code slots and shift states safely
-    shopOrder.status = "Delivered"; 
-    shopOrder.deliveryOTP = null;
-    shopOrder.deliveryOTPExpires = null;
-
-    // Resolve assignment tracking schema updates
+    // 🌟 3. Complete the run path successfully
+    shopOrder.status = "Delivered";
+    shopOrder.deliveryOTP = undefined; // Clear the pin
+    shopOrder.deliveryOTPExpires = undefined; 
+    
+    // Also save the assignment record state change if applicable
     assignment.status = "completed";
     assignment.completedAt = new Date();
+    
     await assignment.save();
-
-    // Check if ALL companion sub-orders in this block have finished routing cycles successfully
-    const allDelivered = order.shopOrders.every(so => so.status === "Delivered" || so.status === "Completed");
-    if (allDelivered) {
-      order.status = "Delivered"; // Final master milestone flag update
-    }
-
     await order.save();
 
-    // 5. Broadcast real-time delivery payload updates across your system rooms
-    const driverProfile = await User.findById(driverId).select("name fullName phone email role currentLocation").lean();
-    const io = req.app.get("io");
-    if (io) {
-      const userTargetRoomId = order.user.toString();
-      io.to(userTargetRoomId).emit("orderStatusUpdated", {
-        masterOrderId: order._id.toString(),
-        subOrderId: assignment.shopOrderId.toString(),
-        newStatus: "Delivered",
-        deliveryBoy: driverProfile
-      });
-    }
-
-    return res.status(200).json({ success: true, message: "Doorstep OTP verified successfully! Order completed." });
+    return res.status(200).json({ success: true, message: "Order completed successfully!" });
 
   } catch (error) {
     console.error("Crash inside verifyDeliveryOTP pipeline:", error);

@@ -2,14 +2,22 @@ import React, { useState, useEffect } from 'react';
 import { useSocket } from '../context/SocketContext';
 import { FaMapMarkerAlt, FaStore, FaMoneyBillWave, FaClock, FaShippingFast, FaMap, FaLock, FaUndo, FaTimes } from 'react-icons/fa';
 import { useSelector } from 'react-redux'; 
-import axios from 'axios';
+import axios from 'axios'; 
 import { serverUrl } from '../App';
 import toast from 'react-hot-toast';
+
+const axiosClient = axios;
 
 const DeliveryBoy = () => {
   const { socket } = useSocket();
   const [availableJobs, setAvailableJobs] = useState([]);
-  const [activeDelivery, setActiveDelivery] = useState(null);
+  
+  // 🌟 PERSISTENCE STEP 1: Initialize activeDelivery state directly from localStorage fallback if available
+  const [activeDelivery, setActiveDelivery] = useState(() => {
+    const savedRun = localStorage.getItem('current_active_delivery_run');
+    return savedRun ? JSON.parse(savedRun) : null;
+  });
+  
   const [loadingId, setLoadingId] = useState(null);
   const [completing, setCompleting] = useState(false); 
 
@@ -21,13 +29,35 @@ const DeliveryBoy = () => {
   const { userData, loading } = useSelector((state) => state.user || {});
   const driverId = userData?._id;
 
+  // 🌟 PERSISTENCE STEP 2: Sync activeDelivery to localStorage whenever it changes
+  useEffect(() => {
+    if (activeDelivery) {
+      localStorage.setItem('current_active_delivery_run', JSON.stringify(activeDelivery));
+    } else {
+      localStorage.removeItem('current_active_delivery_run');
+    }
+  }, [activeDelivery]);
+
+  // 🌟 PERSISTENCE STEP 3: Query the backend on mount/refresh to find any already accepted runs
   useEffect(() => {
     const fetchExistingJobs = async () => {
       if (!driverId) return;
       try {
-        const response = await axios.get(`${serverUrl}/api/delivery/available-jobs`, { withCredentials: true });
+        // Fetch available job feeds
+        const response = await axiosClient.get(`${serverUrl}/api/delivery/available-jobs`, { withCredentials: true });
         if (response.data.success) {
-          setAvailableJobs(response.data.jobs);
+          setAvailableJobs(response.data.jobs || []);
+          
+          // If your backend endpoint returns the currently assigned active job in the payload, 
+          // we use it to securely hydrate the active panel even if localStorage was cleared.
+          if (response.data.activeJob) {
+            const activeJobData = response.data.activeJob;
+            setActiveDelivery({
+              ...activeJobData,
+              savedShopName: activeJobData.shopName || activeJobData.shop?.name || activeJobData.items?.[0]?.shopId?.name,
+              savedShopAddress: activeJobData.shopAddress || activeJobData.shop?.address || activeJobData.items?.[0]?.shopId?.address || activeJobData.storeAddress
+            });
+          }
         }
       } catch (error) {
         console.error("Error fetching initialized jobs:", error);
@@ -41,14 +71,16 @@ const DeliveryBoy = () => {
 
     socket.on('newDeliveryJobAvailable', (jobData) => {
       setAvailableJobs((prevJobs) => {
-        if (prevJobs.some(job => job.assignmentId === jobData.assignmentId)) return prevJobs;
+        const currentIncomingId = jobData.subOrderId || jobData.assignmentId || jobData._id;
+        if (prevJobs.some(job => (job.subOrderId || job.assignmentId || job._id) === currentIncomingId)) return prevJobs;
         return [jobData, ...prevJobs];
       });
       toast(`New delivery job available nearby!`, { icon: '📦', position: 'bottom-right' });
     });
 
     socket.on('removeDeliveryJobCard', (data) => {
-      setAvailableJobs((prevJobs) => prevJobs.filter(job => job.assignmentId !== data.assignmentId));
+      const targetRemoveId = data.subOrderId || data.assignmentId || data._id;
+      setAvailableJobs((prevJobs) => prevJobs.filter(job => (job.subOrderId || job.assignmentId || job._id) !== targetRemoveId));
     });
 
     return () => {
@@ -70,13 +102,13 @@ const DeliveryBoy = () => {
 
         if (socket) {
           socket.emit('shareRiderLocationUpdate', {
-            assignmentId: activeDelivery.assignmentId,
+            assignmentId: activeDelivery.assignmentId || activeDelivery._id || activeDelivery.subOrderId,
             coords: currentCoordinates
           });
         }
       },
       (error) => {
-        console.log("Telemetry engine background ping mode enabled.");
+        console.log("Telemetry engine background pings running.");
       },
       {
         enableHighAccuracy: true,
@@ -90,41 +122,63 @@ const DeliveryBoy = () => {
     };
   }, [activeDelivery, socket]);
 
-  const handleAcceptJob = async (assignmentId) => {
-    setLoadingId(assignmentId);
+  const handleAcceptJob = async (jobObject) => {
+    if (!jobObject) {
+      toast.error("Unable to read job data context payload.");
+      return;
+    }
+
+    const targetId = jobObject.subOrderId || jobObject.masterOrderId || jobObject.assignmentId || jobObject._id;
+    
+    if (!targetId) {
+      toast.error("Invalid Request ID reference.");
+      return;
+    }
+
+    setLoadingId(targetId);
     try {
-      const response = await axios.post(`${serverUrl}/api/delivery/accept-job`, 
-        { assignmentId }, 
+      const response = await axiosClient.post(`${serverUrl}/api/delivery/accept-job`, 
+        { 
+          assignmentId: targetId,
+          shopOrderId: jobObject.subOrderId || targetId 
+        }, 
         { withCredentials: true }
       );
 
       if (response.data.success) {
         toast.success("Job accepted! Drive safely.");
-        const acceptedJob = availableJobs.find(job => job.assignmentId === assignmentId);
+        
+        const acceptedJob = {
+          ...jobObject,
+          ...(response.data.assignment || {}),
+          savedShopName: jobObject.shopName || jobObject.shop?.name || jobObject.items?.[0]?.shopId?.name,
+          savedShopAddress: jobObject.shopAddress || jobObject.shop?.address || jobObject.items?.[0]?.shopId?.address || jobObject.storeAddress
+        };
+        
         setActiveDelivery(acceptedJob);
-        setAvailableJobs((prevJobs) => prevJobs.filter(job => job.assignmentId !== assignmentId));
+        setAvailableJobs((prevJobs) => 
+          prevJobs.filter(job => (job.subOrderId || job.masterOrderId || job.assignmentId || job._id) !== targetId)
+        );
       }
     } catch (error) {
       const errorMsg = error.response?.data?.message || "Could not accept this job.";
       toast.error(errorMsg);
-      setAvailableJobs((prevJobs) => prevJobs.filter(job => job.assignmentId !== assignmentId));
     } finally {
       setLoadingId(null);
     }
   };
 
-  // =========================================================================
-  // 🔑 PHASE 1: DISPATCH TIME-SENSITIVE SECURITY OTP TO USER EMAIL
-  // =========================================================================
   const handleInitiateDropoff = async (isResend = false) => {
     if (!activeDelivery) return;
     
     if (isResend) setResending(true);
     else setCompleting(true);
 
+    const activeTrackingId = activeDelivery.assignmentId || activeDelivery._id || activeDelivery.subOrderId;
+
     try {
-      const response = await axios.post(`${serverUrl}/api/delivery/send-otp`, 
-        { assignmentId: activeDelivery.assignmentId },
+      const response = await axiosClient.post(`${serverUrl}/api/delivery/send-otp`, 
+        { assignmentId: activeTrackingId },
         { withCredentials: true }
       );
 
@@ -141,19 +195,18 @@ const DeliveryBoy = () => {
     }
   };
 
-  // =========================================================================
-  // 🔒 PHASE 2: SUBMIT INPUT PIN AND COMPLETE DELIVERY LIFECYCLE
-  // =========================================================================
   const handleVerifyOtpAndComplete = async (e) => {
     e.preventDefault();
     if (!activeDelivery) return;
     if (otpInput.length !== 6) return toast.error("Please provide the complete 6-digit pin.");
 
     setCompleting(true);
+    const activeTrackingId = activeDelivery.assignmentId || activeDelivery._id || activeDelivery.subOrderId;
+
     try {
-      const response = await axios.post(`${serverUrl}/api/delivery/verify-otp`, 
+      const response = await axiosClient.post(`${serverUrl}/api/delivery/verify-otp`, 
         { 
-          assignmentId: activeDelivery.assignmentId,
+          assignmentId: activeTrackingId,
           inputOTP: otpInput
         },
         { withCredentials: true }
@@ -163,7 +216,7 @@ const DeliveryBoy = () => {
         toast.success("Doorstep OTP verified! Order completed successfully.");
         setShowOtpModal(false);
         setOtpInput('');
-        setActiveDelivery(null); // Clean workspace context for next job
+        setActiveDelivery(null); // This automatically fires the useEffect hook to wipe localStorage clean
       }
     } catch (error) {
       console.error("Validation submission crash:", error);
@@ -173,16 +226,14 @@ const DeliveryBoy = () => {
     }
   };
 
-  // =========================================================================
-  // 🗺️ GOOGLE MAPS DIRECTION GENERATOR (SHOP ➔ CUSTOMER)
-  // =========================================================================
   const handleOpenGoogleMapsNavigation = () => {
     if (!activeDelivery) return;
 
-    const originShop = encodeURIComponent(activeDelivery.shopAddress || "");
+    const rawAddress = activeDelivery.savedShopAddress || activeDelivery.shopAddress || activeDelivery.shop?.address || "";
+    const originShop = encodeURIComponent(rawAddress);
     const destLat = activeDelivery.deliveryAddress?.lat;
     const destLng = activeDelivery.deliveryAddress?.lng;
-    const destText = encodeURIComponent(activeDelivery.deliveryAddress?.text || "");
+    const destText = encodeURIComponent(activeDelivery.deliveryAddress?.text || activeDelivery.deliveryAddress || "");
 
     let googleMapsUrl = "";
 
@@ -228,51 +279,58 @@ const DeliveryBoy = () => {
           ) : (
             <div className="flex flex-col gap-4">
               <h2 className="text-sm font-bold text-orange-600 tracking-wider uppercase">Offers In Your Radius ({availableJobs.length})</h2>
-              {availableJobs.map((job) => (
-                <div key={job.assignmentId} className="bg-white rounded-2xl border border-gray-100 p-6 shadow-sm hover:shadow-md transition-all flex flex-col justify-between gap-4 md:flex-row md:items-center">
-                  <div className="flex-1 flex flex-col gap-3">
-                    <div className="flex items-start gap-3">
-                      <div className="p-2 rounded-lg bg-orange-50 text-[#ff4d2d] mt-0.5">
-                        <FaStore size={16} />
+              {availableJobs.map((job, index) => {
+                const uniqueKeyId = job.subOrderId || job.assignmentId || job._id || `offer-card-${index}`;
+                return (
+                  <div key={uniqueKeyId} className="bg-white rounded-2xl border border-gray-100 p-6 shadow-sm hover:shadow-md transition-all flex flex-col justify-between gap-4 md:flex-row md:items-center">
+                    <div className="flex-1 flex flex-col gap-3">
+                      <div className="flex items-start gap-3">
+                        <div className="p-2 rounded-lg bg-orange-50 text-[#ff4d2d] mt-0.5">
+                          <FaStore size={16} />
+                        </div>
+                        <div>
+                          <span className="text-[11px] uppercase tracking-wider font-bold text-gray-400">Pickup Location</span>
+                          <h4 className="font-bold text-gray-800 text-base leading-tight mt-0.5">
+                            {job.shopName || job.shop?.name || job.items?.[0]?.shopId?.name || "Store Merchant"}
+                          </h4>
+                          <p className="text-sm text-gray-500 truncate max-w-[350px] md:max-w-[450px]">
+                            {job.shopAddress || job.shop?.address || job.items?.[0]?.shopId?.address || job.storeAddress || "Address details missing"}
+                          </p>
+                        </div>
                       </div>
-                      <div>
-                        <span className="text-[11px] uppercase tracking-wider font-bold text-gray-400">Pickup Location</span>
-                        <h4 className="font-bold text-gray-800 text-base leading-tight mt-0.5">{job.shopName}</h4>
-                        <p className="text-sm text-gray-500 truncate max-w-[350px] md:max-w-[450px]">{job.shopAddress}</p>
+
+                      <div className="w-full border-t border-dashed border-gray-100 my-1"></div>
+
+                      <div className="flex items-start gap-3">
+                        <div className="p-2 rounded-lg bg-blue-50 text-blue-500 mt-0.5">
+                          <FaMapMarkerAlt size={16} />
+                        </div>
+                        <div>
+                          <span className="text-[11px] uppercase tracking-wider font-bold text-gray-400">Delivery Drop-off</span>
+                          <p className="text-sm font-semibold text-gray-700 mt-0.5">{job.deliveryAddress?.text || job.deliveryAddress}</p>
+                        </div>
                       </div>
                     </div>
 
-                    <div className="w-full border-t border-dashed border-gray-100 my-1"></div>
+                    <div className="border-t md:border-t-0 md:border-l border-gray-100 pt-4 md:pt-0 md:pl-6 flex flex-row md:flex-col items-center justify-between md:justify-center gap-4 min-w-[140px]">
+                      <div className="text-left md:text-center">
+                        <span className="text-[10px] text-gray-400 uppercase font-bold tracking-wider">Order Value</span>
+                        <div className="text-xl font-black text-gray-800 flex items-center justify-start md:justify-center gap-1">
+                          <FaMoneyBillWave className="text-emerald-500 text-lg" /> ₹{job.subTotal || job.orderValue || 0}
+                        </div>
+                      </div>
 
-                    <div className="flex items-start gap-3">
-                      <div className="p-2 rounded-lg bg-blue-50 text-blue-500 mt-0.5">
-                        <FaMapMarkerAlt size={16} />
-                      </div>
-                      <div>
-                        <span className="text-[11px] uppercase tracking-wider font-bold text-gray-400">Delivery Drop-off</span>
-                        <p className="text-sm font-semibold text-gray-700 mt-0.5">{job.deliveryAddress?.text}</p>
-                      </div>
+                      <button
+                        disabled={loadingId !== null}
+                        onClick={() => handleAcceptJob(job)}
+                        className="w-full max-w-[150px] bg-[#ff4d2d] text-white font-bold py-3 px-4 rounded-xl shadow-lg hover:bg-[#e03d1e] disabled:bg-gray-300 transition-all text-sm tracking-wide cursor-pointer"
+                      >
+                        {loadingId === (job.subOrderId || job.assignmentId || job._id) ? 'Claiming...' : 'Accept Job'}
+                      </button>
                     </div>
                   </div>
-
-                  <div className="border-t md:border-t-0 md:border-l border-gray-100 pt-4 md:pt-0 md:pl-6 flex flex-row md:flex-col items-center justify-between md:justify-center gap-4 min-w-[140px]">
-                    <div className="text-left md:text-center">
-                      <span className="text-[10px] text-gray-400 uppercase font-bold tracking-wider">Order Value</span>
-                      <div className="text-xl font-black text-gray-800 flex items-center justify-start md:justify-center gap-1">
-                        <FaMoneyBillWave className="text-emerald-500 text-lg" /> ₹{job.subTotal}
-                      </div>
-                    </div>
-
-                    <button
-                      disabled={loadingId !== null}
-                      onClick={() => handleAcceptJob(job.assignmentId)}
-                      className="w-full max-w-[150px] bg-[#ff4d2d] text-white font-bold py-3 px-4 rounded-xl shadow-lg hover:bg-[#e03d1e] disabled:bg-gray-300 transition-all text-sm tracking-wide cursor-pointer"
-                    >
-                      {loadingId === job.assignmentId ? 'Claiming...' : 'Accept Job'}
-                    </button>
-                  </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           )}
         </div>
@@ -296,23 +354,34 @@ const DeliveryBoy = () => {
                   <div className="flex items-center gap-2 text-orange-800 font-bold text-sm">
                     <FaClock className="animate-spin text-orange-500" /> In-Route To Customer
                   </div>
-                  <span className="text-xs font-black text-orange-700 bg-white border border-orange-200 px-2 py-0.5 rounded shadow-sm">
-                    ₹{activeDelivery.subTotal}
-                  </span>
+                  
                 </div>
 
                 <div className="flex flex-col gap-4">
                   <div>
                     <label className="text-[10px] uppercase font-black text-gray-400 tracking-wider">Store Pickup</label>
-                    <p className="font-bold text-gray-800 text-sm mt-0.5">{activeDelivery.shopName}</p>
-                    <p className="text-xs text-gray-500 mt-0.5">{activeDelivery.shopAddress}</p>
+                    <p className="font-bold text-gray-800 text-sm mt-0.5">
+                      {activeDelivery.savedShopName || 
+                       activeDelivery.shopName || 
+                       activeDelivery.shop?.name || 
+                       activeDelivery.items?.[0]?.shopId?.name || 
+                       "Partner Store"}
+                    </p>
+                    <p className="text-xs text-gray-500 mt-0.5">
+                      {activeDelivery.savedShopAddress ||
+                       activeDelivery.shopAddress || 
+                       activeDelivery.shop?.address || 
+                       activeDelivery.items?.[0]?.shopId?.address || 
+                       activeDelivery.storeAddress ||
+                       "Address details missing"}
+                    </p>
                   </div>
 
                   <div className="h-[20px] border-l-2 border-dashed border-gray-200 ml-3"></div>
 
                   <div>
                     <label className="text-[10px] uppercase font-black text-gray-400 tracking-wider">Customer Destination</label>
-                    <p className="font-semibold text-gray-700 text-xs mt-0.5">{activeDelivery.deliveryAddress?.text}</p>
+                    <p className="font-semibold text-gray-700 text-xs mt-0.5">{activeDelivery.deliveryAddress?.text || activeDelivery.deliveryAddress}</p>
                   </div>
                 </div>
 
@@ -369,7 +438,7 @@ const DeliveryBoy = () => {
                 maxLength="6"
                 placeholder="••••••"
                 value={otpInput}
-                onChange={(e) => setOtpInput(e.target.value.replace(/\D/g, ""))} // Numbers only guard
+                onChange={(e) => setOtpInput(e.target.value.replace(/\D/g, ""))} 
                 className="w-full text-center text-2xl font-black tracking-[12px] bg-gray-50 border-2 border-gray-100 focus:border-[#ff4d2d] focus:bg-white rounded-2xl p-3.5 outline-none transition-all"
                 autoFocus
               />

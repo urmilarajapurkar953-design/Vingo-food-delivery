@@ -7,7 +7,7 @@ import axios from 'axios';
 import 'leaflet/dist/leaflet.css'; // Import it right here
 
 // Redux Actions
-import {clearCart} from '../redux/user.Slice'; 
+import { clearCart } from '../redux/user.Slice'; 
 import { setLocation, setAddress } from '../redux/mapSlice';
 
 // Leaflet Imports
@@ -30,18 +30,17 @@ function RecenterMap({ lat, lon, forceUpdate }) {
   const map = useMap();
   useEffect(() => {
     if (lat && lon) {
-      // Using flyTo for that smooth buttery animation you wanted
       map.flyTo([lat, lon], 15, {
         animate: true,
         duration: 1.5
       });
     }
-  }, [lat, lon, forceUpdate, map]); // Added forceUpdate to dependency array
+  }, [lat, lon, forceUpdate, map]);
   return null;
 }
 
 const CheckOut = () => {
-  const { cartItem, currentAddress } = useSelector((state) => state.user);
+  const { cartItem, currentAddress, userData } = useSelector((state) => state.user);
   const { location } = useSelector((state) => state.map);
   
   const navigate = useNavigate();
@@ -50,7 +49,6 @@ const CheckOut = () => {
   const [deliveryAddress, setDeliveryAddress] = useState("");
   const [paymentMethod, setPaymentMethod] = useState('COD');
   const [loading, setLoading] = useState(false);
-  // This state helps us "force" the map to snap back even if coordinates haven't changed
   const [forceMapUpdate, setForceMapUpdate] = useState(0);
 
   // Sync initial address from Redux
@@ -61,11 +59,9 @@ const CheckOut = () => {
   // --- MULTI-SHOP DYNAMIC DELIVERY FEE CALCULATIONS ---
   const subtotal = cartItem.reduce((acc, item) => acc + item.price * item.quantity, 0);
   
-  // Extract all unique shops present in the user's cart list
   const uniqueShops = [...new Set(cartItem.map(item => item.shop || item.shopId).filter(Boolean))];
   const totalShopsCount = uniqueShops.length > 0 ? uniqueShops.length : 1;
   
-  // Flat standard fee of ₹40 applied to every unique restaurant branch visited
   const deliveryFee = totalShopsCount * 40; 
   const total = subtotal + deliveryFee;
 
@@ -83,15 +79,9 @@ const CheckOut = () => {
       if (response.data.features && response.data.features.length > 0) {
         const { lat, lon, formatted } = response.data.features[0].properties;
         
-        // Update Redux
         dispatch(setLocation({ lat, lon }));
         dispatch(setAddress(formatted));
-        
-        // Update local input
         setDeliveryAddress(formatted);
-        
-        // IMPORTANT: Increment this to trigger the useEffect in RecenterMap 
-        // even if lat/lon are the same as before
         setForceMapUpdate(prev => prev + 1);
         
         toast.success("Map centered on location");
@@ -106,58 +96,150 @@ const CheckOut = () => {
     }
   };
 
-const handlePlaceOrder = async () => {
-  // 1. Validate that the cart isn't empty
-  if (!cartItem || cartItem.length === 0) {
-    return toast.error("Your cart is empty.");
-  }
-
-  // 2. Validate that an address has been set
-  if (!deliveryAddress || deliveryAddress.trim().length < 5) {
-    return toast.error("Please enter a valid delivery address.");
-  }
-
-  setLoading(true);
-  try {
-    // 3. Map values using your EXACT local component variables: cartItem, paymentMethod, and total
-    const orderPayload = {
-      items: cartItem.map(item => ({
-        product: item._id, // Extracts the clean product database item ID
-        quantity: item.quantity
-      })),
-      paymentMethod: paymentMethod, // Uses your local 'COD' or 'Online' state matching your schema
-      deliveryAddress: {
-        text: deliveryAddress, // Passes the text address value
-        lat: location.lat || 19.2812, // Captures map latitude dynamically
-        lon: location.lon || 72.8554  // Captures map longitude dynamically
-      },
-      totalAmount: total // Uses your real combined total (subtotal + deliveryFee)
-    };
-
-    console.log("🚀 Sending clean payload to backend:", orderPayload);
-
-    // 4. Fire API request with credentials support
-   const response = await axios.post("http://localhost:8000/api/orders/place", orderPayload, {
-  withCredentials: true 
-});
-
-    if (response.data.success) {
-      toast.success("Order placed successfully!");
-      
-      // Clear Redux Cart state
-      dispatch(clearCart());
-      
-      // Navigate to the OrderPlaced page you built, passing the order details
-      navigate('/order-placed', { state: { orders: response.data.orders } });
+  // 🛠️ SPLIT ACTION WORKFLOW MANAGER
+  const handlePlaceOrder = async () => {
+    if (!cartItem || cartItem.length === 0) {
+      return toast.error("Your cart is empty.");
     }
 
-  } catch (error) {
-    console.error("Order completion failed:", error);
-    alert(error.response?.data?.message || "Something went wrong while executing checkout.");
-  } finally {
-    setLoading(false);
-  }
-};
+    if (!deliveryAddress || deliveryAddress.trim().length < 5) {
+      return toast.error("Please enter a valid delivery address.");
+    }
+
+    // Structure baseline data payload block matching backend expected layouts
+    const baseOrderPayload = {
+      items: cartItem.map(item => ({
+        product: item._id, 
+        quantity: item.quantity
+      })),
+      deliveryAddress: {
+        text: deliveryAddress, 
+        lat: location.lat || 19.2812, 
+        lon: location.lon || 72.8554  
+      },
+      totalAmount: total 
+    };
+
+    if (paymentMethod === 'Online') {
+      // Execute Razorpay Script overlay workflow
+      handleOnlinePaymentFlow(baseOrderPayload);
+    } else {
+      // Execute simple immediate Cash on Delivery server routing
+      handleCodPaymentFlow(baseOrderPayload);
+    }
+  };
+
+  // 📦 PIPELINE A: CASH ON DELIVERY WORKFLOW
+  const handleCodPaymentFlow = async (payload) => {
+    setLoading(true);
+    try {
+      const finalPayload = { ...payload, paymentMethod: 'COD' };
+      console.log("🚀 Placing COD Order payload:", finalPayload);
+
+      const response = await axios.post("http://localhost:8000/api/orders/place", finalPayload, {
+        withCredentials: true 
+      });
+
+      if (response.data.success) {
+        toast.success("Order placed successfully!");
+        dispatch(clearCart());
+        navigate('/order-placed', { state: { orders: response.data.orders } });
+      }
+    } catch (error) {
+      console.error("COD completion failed:", error);
+      alert(error.response?.data?.message || "Something went wrong while executing checkout.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // 💳 PIPELINE B: RAZORPAY ONLINE PAYMENT GATEWAY FLOW
+  // 💳 PIPELINE B: RAZORPAY ONLINE PAYMENT GATEWAY FLOW
+  const handleOnlinePaymentFlow = async (payload) => {
+    setLoading(true);
+    try {
+      // 1. Request Order Reference block registration on backend
+      const { data } = await axios.post("http://localhost:8000/api/payment/razor-order", { amount: total }, {
+        withCredentials: true
+      });
+
+      if (!data || !data.razorpayOrder) {
+        throw new Error("Failed to initialize Razorpay transaction token reference.");
+      }
+
+      const { razorpayOrder } = data;
+
+      // 2. Open configuration script layout window constructor
+      const options = {
+        key: import.meta.env.VITE_RAZORPAY_KEY_ID || "YOUR_TEST_KEY_ID",
+        amount: razorpayOrder.amount,
+        currency: razorpayOrder.currency,
+        name: "Vingo",
+        description: "Secure Order Checkout",
+        order_id: razorpayOrder.id,
+        handler: async function (paymentResponse) {
+          try {
+            setLoading(true);
+            // 3. Authenticate signature block before recording data transaction
+            const verifyRes = await axios.post("http://localhost:8000/api/payment/verify", {
+              razorpay_order_id: paymentResponse.razorpay_order_id,
+              razorpay_payment_id: paymentResponse.razorpay_payment_id,
+              razorpay_signature: paymentResponse.razorpay_signature
+            }, { withCredentials: true });
+
+            if (verifyRes.data.success) {
+              // 4. Save order to DB upon successful verification
+              // 🔹 FIX: Changed 'Online Payment (Razorpay)' to 'Online' to satisfy Mongoose enum validation
+              const finalPayload = { 
+                ...payload, 
+                paymentMethod: 'Online', 
+                paymentStatus: 'Paid',
+                razorpayOrderId: paymentResponse.razorpay_order_id,
+                razorpayPaymentId: paymentResponse.razorpay_payment_id
+              };
+
+              const orderResponse = await axios.post("http://localhost:8000/api/orders/place", finalPayload, {
+                withCredentials: true 
+              });
+
+              if (orderResponse.data.success) {
+                toast.success("Online payment captured & order placed!");
+                dispatch(clearCart());
+                navigate('/order-placed', { state: { orders: orderResponse.data.orders } });
+              }
+            }
+          } catch (err) {
+            console.error("Signature processing failure:", err);
+            toast.error(err.response?.data?.message || "Verification tracking error window.");
+          } finally {
+            setLoading(false);
+          }
+        },
+        prefill: {
+          name: userData?.fullName || userData?.name || "",
+          email: userData?.email || "",
+          contact: userData?.phone || ""
+        },
+        theme: {
+          color: "#ff4d2d"
+        },
+        modal: {
+          ondismiss: function () {
+            setLoading(false);
+          }
+        }
+      };
+
+      const razorpayModal = new window.Razorpay(options);
+      razorpayModal.open();
+
+    } catch (error) {
+      console.error("Online launch route failed:", error);
+      toast.error(error.response?.data?.message || "Failed initializing payment gateway infrastructure.");
+      setLoading(false);
+    }
+  };
+
   return (
     <div className="min-h-screen bg-gray-50 p-4 md:p-8">
       <div className="max-w-2xl mx-auto bg-white rounded-3xl shadow-sm border border-gray-100 p-6">
@@ -192,7 +274,7 @@ const handlePlaceOrder = async () => {
               type="button"
               onClick={() => {
                 setDeliveryAddress(currentAddress);
-                setForceMapUpdate(prev => prev + 1); // Also snap back for live location
+                setForceMapUpdate(prev => prev + 1); 
               }}
               className="bg-blue-500 p-3 rounded-xl text-white hover:bg-blue-600 transition-colors"
             >
@@ -207,14 +289,13 @@ const handlePlaceOrder = async () => {
                 center={[location.lat, location.lon]} 
                 zoom={15} 
                 style={{ height: '100%', width: '100%' }}
-                scrollWheelZoom={true} // Changed to true so you can "go around" as requested
+                scrollWheelZoom={true} 
               >
                 <TileLayer
                   url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
                   attribution='&copy; OpenStreetMap contributors'
                 />
                 <Marker position={[location.lat, location.lon]} />
-                {/* Pass forceMapUpdate here */}
                 <RecenterMap lat={location.lat} lon={location.lon} forceUpdate={forceMapUpdate} />
               </MapContainer>
             ) : (
@@ -281,7 +362,7 @@ const handlePlaceOrder = async () => {
           </div>
         </div>
 
-        {/* Dynamic Action Button text depending on payment selection */}
+        {/* Dynamic Action Button */}
         <button 
           onClick={handlePlaceOrder}
           disabled={loading}

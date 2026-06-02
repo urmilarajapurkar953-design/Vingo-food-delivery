@@ -195,16 +195,21 @@ export const verifyOtp = async (req, res) => {
         let user = await User.findOne({ email });
 
         if (!user) {
+            // 💡 FIX: If Google doesn't provide mobile or role, set safe defaults 
+            // so your Mongoose schema validator won't crash with a 500 error.
+            const defaultMobile = mobile || `google_${Date.now().toString().slice(-6)}`;
+            const defaultRole = role || "user";
+
             // 2. Create the user and assign it to our 'user' variable
             user = await User.create({
                 fullName,
                 email,
-                mobile,
-                role
+                mobile: defaultMobile, 
+                role: defaultRole
             });
         }
 
-        // 3. Use 'user._id' (not newUser)
+        // 3. Use 'user._id'
         const token = await genToken(user._id);
 
         // 4. Set Cookie
@@ -228,7 +233,8 @@ export const verifyOtp = async (req, res) => {
         });
 
     } catch (error) {
-        // This will now catch the error and tell you exactly what's wrong
+        // Log the exact error directly in your backend console so you can inspect it!
+        console.error("💥 Google Auth Internal Error Details:", error);
         return res.status(500).json({ message: error.message });
     }
 };

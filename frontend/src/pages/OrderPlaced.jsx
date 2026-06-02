@@ -158,7 +158,7 @@ const OrderPlaced = () => {
           </button>
           
           <button
-            onClick={() => navigate('/orders')} 
+            onClick={() => navigate('/my-orders')} 
             className="w-full bg-gray-100 hover:bg-gray-200 text-gray-700 py-4 rounded-2xl font-bold transition-all active:scale-[0.98] flex items-center justify-center gap-2 text-sm"
           >
             <span>Track Delivery</span>

@@ -13,6 +13,7 @@ import shopRouter from "./routes/shop.routes.js";
 import itemRouter from "./routes/item.routes.js";
 import orderRouter from "./routes/order.routes.js"; 
 import deliveryRouter from "./routes/delivery.routes.js";
+import paymentRouter from "./routes/payment.routes.js"; // 🌟 ADD THIS LINE
 
 const app = express();
 
@@ -65,6 +66,7 @@ app.use("/api/item", itemRouter);
 app.use("/api/orders", orderRouter); 
 app.use("/api/v1/shops", shopRouter); 
 app.use("/api/delivery", deliveryRouter);
+app.use("/api/payment", paymentRouter); // 🌟
 
 const PORT = process.env.PORT || 8000; 
 
