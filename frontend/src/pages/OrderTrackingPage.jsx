@@ -166,8 +166,8 @@ const OrderTrackingPage = () => {
           </div>
 
           {/* Package Details */}
-          <div className="bg-white rounded-3xl p-5 border border-gray-100 shadow-sm">
-            <h2 className="text-xs font-black text-gray-400 tracking-wider uppercase mb-3 flex items-center gap-1.5">
+          <div className="bg-white rounded-3xl p-5 border border-gray-100 shadow-sm space-y-4">
+            <h2 className="text-xs font-black text-gray-400 tracking-wider uppercase flex items-center gap-1.5">
               <FaBox /> Items Package
             </h2>
             <div className="space-y-2.5 max-h-[180px] overflow-y-auto pr-1">
@@ -185,6 +185,24 @@ const OrderTrackingPage = () => {
                   <span className="text-xs font-bold text-gray-700">₹{itemObj.price * itemObj.quantity}</span>
                 </div>
               ))}
+            </div>
+
+            {/* 🌟 NEW: Live Summary Receipt Sub-Layer */}
+            <div className="pt-3 border-t border-gray-100 space-y-1.5 text-xs">
+              <div className="flex justify-between text-gray-500 font-medium">
+                <span>Subtotal Amount Due</span>
+                <span>₹{orderData.totalPaid || 0}</span>
+              </div>
+              <div className="flex justify-between items-center bg-gray-50 p-2 rounded-xl mt-1">
+                <span className="font-extrabold text-gray-800">Payment Ledger Status</span>
+                <span className={`px-2.5 py-0.5 rounded-md font-black uppercase text-[10px] tracking-wide border ${
+                  isCOD 
+                    ? "bg-amber-100 text-amber-800 border-amber-200" 
+                    : "bg-emerald-100 text-emerald-800 border-emerald-200"
+                }`}>
+                  {isCOD ? "Pending COD Collection" : "Paid & Verified"}
+                </span>
+              </div>
             </div>
           </div>
 

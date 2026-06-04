@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useSocket } from '../context/SocketContext';
-import { FaMapMarkerAlt, FaStore, FaMoneyBillWave, FaClock, FaShippingFast, FaMap, FaLock, FaUndo, FaTimes } from 'react-icons/fa';
+import { FaMapMarkerAlt, FaStore, FaMoneyBillWave, FaClock, FaShippingFast, FaMap, FaLock, FaUndo, FaTimes, FaCreditCard, FaWallet } from 'react-icons/fa';
 import { useSelector } from 'react-redux'; 
 import axios from 'axios'; 
 import { serverUrl } from '../App';
@@ -38,6 +38,8 @@ const DeliveryBoy = () => {
     }
   }, [activeDelivery]);
 
+  
+
   // 🌟 PERSISTENCE STEP 3: Query the backend on mount/refresh to find any already accepted runs
   useEffect(() => {
     const fetchExistingJobs = async () => {
@@ -50,14 +52,16 @@ const DeliveryBoy = () => {
           
           // If your backend endpoint returns the currently assigned active job in the payload, 
           // we use it to securely hydrate the active panel even if localStorage was cleared.
-          if (response.data.activeJob) {
-            const activeJobData = response.data.activeJob;
-            setActiveDelivery({
-              ...activeJobData,
-              savedShopName: activeJobData.shopName || activeJobData.shop?.name || activeJobData.items?.[0]?.shopId?.name,
-              savedShopAddress: activeJobData.shopAddress || activeJobData.shop?.address || activeJobData.items?.[0]?.shopId?.address || activeJobData.storeAddress
-            });
-          }
+         if (response.data.activeJob) {
+  const activeJobData = response.data.activeJob;
+  setActiveDelivery({
+    ...activeJobData,
+    // Safely pull total down if it's nested inside a master order object
+    subTotal: activeJobData.subTotal || activeJobData.orderValue || activeJobData.masterOrderId?.subTotal || activeJobData.orderId?.subTotal,
+    savedShopName: activeJobData.shopName || activeJobData.shop?.name || activeJobData.items?.[0]?.shopId?.name,
+    savedShopAddress: activeJobData.shopAddress || activeJobData.shop?.address || activeJobData.items?.[0]?.shopId?.address || activeJobData.storeAddress
+  });
+}
         }
       } catch (error) {
         console.error("Error fetching initialized jobs:", error);
@@ -146,15 +150,17 @@ const DeliveryBoy = () => {
       );
 
       if (response.data.success) {
-        toast.success("Job accepted! Drive safely.");
-        
-        const acceptedJob = {
-          ...jobObject,
-          ...(response.data.assignment || {}),
-          savedShopName: jobObject.shopName || jobObject.shop?.name || jobObject.items?.[0]?.shopId?.name,
-          savedShopAddress: jobObject.shopAddress || jobObject.shop?.address || jobObject.items?.[0]?.shopId?.address || jobObject.storeAddress
-        };
-        
+  toast.success("Job accepted! Drive safely.");
+  
+  const acceptedJob = {
+    // 1. Start with your backend assignment properties
+    ...(response.data.assignment || {}),
+    // 2. Spread the original job object second so missing keys fall back to it
+    ...jobObject, 
+    // 3. Keep your custom shop mappings
+    savedShopName: jobObject.shopName || jobObject.shop?.name || jobObject.items?.[0]?.shopId?.name,
+    savedShopAddress: jobObject.shopAddress || jobObject.shop?.address || jobObject.items?.[0]?.shopId?.address || jobObject.storeAddress
+  };
         setActiveDelivery(acceptedJob);
         setAvailableJobs((prevJobs) => 
           prevJobs.filter(job => (job.subOrderId || job.masterOrderId || job.assignmentId || job._id) !== targetId)
@@ -168,7 +174,7 @@ const DeliveryBoy = () => {
     }
   };
 
-  const handleInitiateDropoff = async (isResend = false) => {
+  const handleInitializeDropoff = async (isResend = false) => {
     if (!activeDelivery) return;
     
     if (isResend) setResending(true);
@@ -238,9 +244,9 @@ const DeliveryBoy = () => {
     let googleMapsUrl = "";
 
     if (destLat && destLng) {
-      googleMapsUrl = `https://www.google.com/maps/dir/?api=1&origin=${originShop}&destination=${destLat},${destLng}&travelmode=driving`;
+      googleMapsUrl = `http://maps.google.com/?saddr=${originShop}&daddr=${destLat},${destLng}&travelmode=driving`;
     } else if (destText) {
-      googleMapsUrl = `https://www.google.com/maps/dir/?api=1&origin=${originShop}&destination=${destText}&travelmode=driving`;
+      googleMapsUrl = `http://maps.google.com/?saddr=${originShop}&daddr=${destText}&travelmode=driving`;
     }
 
     if (googleMapsUrl) {
@@ -281,6 +287,8 @@ const DeliveryBoy = () => {
               <h2 className="text-sm font-bold text-orange-600 tracking-wider uppercase">Offers In Your Radius ({availableJobs.length})</h2>
               {availableJobs.map((job, index) => {
                 const uniqueKeyId = job.subOrderId || job.assignmentId || job._id || `offer-card-${index}`;
+                const isJobCOD = job.paymentMethod === "COD" || job.paymentMethod === "Cash on Delivery";
+                
                 return (
                   <div key={uniqueKeyId} className="bg-white rounded-2xl border border-gray-100 p-6 shadow-sm hover:shadow-md transition-all flex flex-col justify-between gap-4 md:flex-row md:items-center">
                     <div className="flex-1 flex flex-col gap-3">
@@ -312,11 +320,20 @@ const DeliveryBoy = () => {
                       </div>
                     </div>
 
-                    <div className="border-t md:border-t-0 md:border-l border-gray-100 pt-4 md:pt-0 md:pl-6 flex flex-row md:flex-col items-center justify-between md:justify-center gap-4 min-w-[140px]">
-                      <div className="text-left md:text-center">
-                        <span className="text-[10px] text-gray-400 uppercase font-bold tracking-wider">Order Value</span>
+                    <div className="border-t md:border-t-0 md:border-l border-gray-100 pt-4 md:pt-0 md:pl-6 flex flex-row md:flex-col items-center justify-between md:justify-center gap-4 min-w-[160px]">
+                      <div className="text-left md:text-center w-full">
+                        <span className="text-[10px] text-gray-400 uppercase font-bold tracking-wider block md:text-center">Order Value</span>
                         <div className="text-xl font-black text-gray-800 flex items-center justify-start md:justify-center gap-1">
                           <FaMoneyBillWave className="text-emerald-500 text-lg" /> ₹{job.subTotal || job.orderValue || 0}
+                        </div>
+                        {/* Nearby Feed Payment Badge */}
+                        <div className={`mt-1.5 flex items-center justify-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-black uppercase tracking-wider border mx-auto w-fit ${
+                          isJobCOD 
+                            ? "bg-amber-50 text-amber-700 border-amber-200" 
+                            : "bg-emerald-50 text-emerald-700 border-emerald-200"
+                        }`}>
+                          {isJobCOD ? <FaWallet size={10} /> : <FaCreditCard size={10} />}
+                          {isJobCOD ? "COD" : "Prepaid"}
                         </div>
                       </div>
 
@@ -354,7 +371,36 @@ const DeliveryBoy = () => {
                   <div className="flex items-center gap-2 text-orange-800 font-bold text-sm">
                     <FaClock className="animate-spin text-orange-500" /> In-Route To Customer
                   </div>
-                  
+                </div>
+
+                {/* 🌟 NEW PROFESSIONAL PAYMENT ACCOUNTABILITY STATUS CARD FOR RIDER */}
+                <div className={`p-4 rounded-xl border flex items-center justify-between shadow-sm ${
+                  activeDelivery.paymentMethod === "COD" || activeDelivery.paymentMethod === "Cash on Delivery"
+                    ? "bg-amber-50 border-amber-200 text-amber-900"
+                    : "bg-emerald-50 border-emerald-200 text-emerald-900"
+                }`}>
+                  <div>
+                    <span className="text-[10px] uppercase font-black opacity-60 tracking-wider block">Financial Accounting Action</span>
+                    <span className="text-xs font-black flex items-center gap-1.5 mt-0.5">
+                      {activeDelivery.paymentMethod === "COD" || activeDelivery.paymentMethod === "Cash on Delivery" ? (
+                        <><FaWallet className="text-amber-600" /> COLLECT CASH AT DOORSTEP</>
+                      ) : (
+                        <><FaCreditCard className="text-emerald-600" /> PAID SECURELY ONLINE</>
+                      )}
+                    </span>
+                  </div>
+                  <div className="text-right">
+                    <span className="text-xs font-mono font-black block bg-white/80 px-2 py-1 rounded-lg border border-black/5">
+{/* Replace the existing price rendering line with this comprehensive fallback mesh */}
+₹{activeDelivery.subTotal || 
+  activeDelivery.orderValue || 
+  activeDelivery.total || 
+  activeDelivery.grandTotal || 
+  activeDelivery.totalPaid || 
+  activeDelivery.price || 
+  0}                    </span>
+  
+                  </div>
                 </div>
 
                 <div className="flex flex-col gap-4">
@@ -396,7 +442,7 @@ const DeliveryBoy = () => {
                   
                   <button 
                     disabled={completing}
-                    onClick={() => handleInitiateDropoff(false)} 
+                    onClick={() => handleInitializeDropoff(false)} 
                     className="w-full bg-emerald-500 text-white text-xs font-bold py-2.5 rounded-lg hover:bg-emerald-600 disabled:bg-gray-300 transition-all shadow-md flex items-center justify-center cursor-pointer"
                   >
                     {completing ? 'Sending OTP...' : 'Confirm Drop-off / Complete Run'}
@@ -456,7 +502,7 @@ const DeliveryBoy = () => {
               <button 
                 type="button"
                 disabled={resending}
-                onClick={() => handleInitiateDropoff(true)}
+                onClick={() => handleInitializeDropoff(true)}
                 className="text-gray-500 hover:text-gray-800 font-bold flex items-center gap-1.5 transition-colors disabled:text-gray-300"
               >
                 <FaUndo className={resending ? "animate-spin" : ""} /> {resending ? "Sending..." : "Resend PIN"}

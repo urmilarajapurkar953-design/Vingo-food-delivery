@@ -10,12 +10,18 @@ const Cart = () => {
   const dispatch = useDispatch();
   const navigate = useNavigate();
 
+  // Unified delivery charge parameter matching your checkout logic
+  const DELIVERY_FEE = 40;
+
   const handleCheckout = () => {
     // Navigate to the checkout route you defined in App.js
     navigate('/checkout');
   };
 
   const totalPrice = cartItem.reduce((acc, item) => acc + (item.price * item.quantity), 0);
+  
+  // Calculate final total including delivery charges
+  const finalTotal = totalPrice + DELIVERY_FEE;
 
   if (cartItem.length === 0) {
     return (
@@ -73,17 +79,17 @@ const Cart = () => {
             </div>
             <div className="flex justify-between mb-4 pb-4 border-b border-gray-100">
               <span className="text-gray-500">Delivery Fee</span>
-              <span className="text-green-600 font-bold">FREE</span>
+              <span className="text-green-600 font-bold">₹{DELIVERY_FEE}</span>
             </div>
             <div className="flex justify-between mb-6">
               <span className="text-lg font-bold">Total</span>
-              <span className="text-lg font-black text-[#ff4d2d]">₹{totalPrice}</span>
+              <span className="text-lg font-black text-[#ff4d2d]">₹{finalTotal}</span>
             </div>
             <button 
               onClick={handleCheckout}
               className="w-full bg-[#ff4d2d] text-white py-4 rounded-2xl font-bold shadow-lg shadow-orange-100 hover:bg-[#e64429] transition-all"
             >
-             Proceed to CheckOut
+              Proceed to CheckOut
             </button>
           </div>
         </div>

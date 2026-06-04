@@ -63,39 +63,46 @@ export const acceptDeliveryJob = async (req, res) => {
     assignment.acceptedAt = new Date();
     await assignment.save();
 
-    const updatedOrder = await Order.findOneAndUpdate(
-      { _id: assignment.order, "shopOrders._id": assignment.shopOrderId },
-      { 
-        $set: { 
-          "shopOrders.$.status": "Driver Assigned",
-          "shopOrders.$.deliveryBoy": driverId 
-        } 
-      },
-      { new: true }
-    ).lean();
+    // Locate inside your acceptDeliveryJob function:
+const updatedOrder = await Order.findOneAndUpdate(
+  { _id: assignment.order, "shopOrders._id": assignment.shopOrderId },
+  { 
+    $set: { 
+      "shopOrders.$.status": "Driver Assigned",
+      "shopOrders.$.deliveryBoy": driverId 
+    } 
+  },
+  { new: true }
+).lean();
 
-    if (!updatedOrder) {
-      return res.status(404).json({ success: false, message: "Order tracking context not found." });
-    }
+if (!updatedOrder) {
+  return res.status(404).json({ success: false, message: "Order tracking context not found." });
+}
 
-    const driverProfile = await User.findById(driverId).select("name fullName phone email role currentLocation").lean();
+const driverProfile = await User.findById(driverId).select("name fullName phone email role currentLocation").lean();
 
-    // 🌟 DATA INTEGRITY ALIGNMENT: Include nested shop parameters to fix "Missing Address" frontend bugs
-    const formattedAssignment = {
-      assignmentId: assignment._id.toString(),
-      orderId: assignment.order.toString(),
-      shopOrderId: assignment.shopOrderId.toString(),
-      shopName: assignment.shopName || "Partner Store",
-      shopAddress: assignment.shopAddress || "Address details missing",
-      deliveryAddress: assignment.deliveryAddress,
-      subTotal: assignment.subTotal || 0,
-      status: assignment.status,
-      // Pass the shop wrapper cleanly so your frontend can safely parse shop?.address
-      shop: {
-        name: assignment.shopName || "Partner Store",
-        address: assignment.shopAddress || "Address details missing"
-      }
-    };
+// 🌟 DATA INTEGRITY ALIGNMENT: Include payment parameters to fix delivery workspace visibility
+// Change this block inside acceptDeliveryJob:
+const formattedAssignment = {
+  assignmentId: assignment._id.toString(),
+  orderId: assignment.order.toString(),
+  shopOrderId: assignment.shopOrderId.toString(),
+  shopName: assignment.shopName || "Partner Store",
+  shopAddress: assignment.shopAddress || "Address details missing",
+  deliveryAddress: assignment.deliveryAddress,
+  
+  // 🔥 FIXED: Pull subTotal directly out of the matched sub-order inside updatedOrder!
+  subTotal: updatedOrder.shopOrders.find(
+    (sub) => sub._id.toString() === assignment.shopOrderId.toString()
+  )?.subTotal || 0,
+  
+  status: assignment.status,
+  paymentMethod: updatedOrder.paymentMethod || "COD", 
+  shop: {
+    name: assignment.shopName || "Partner Store",
+    address: assignment.shopAddress || "Address details missing"
+  }
+};
 
     const io = req.app.get("io");
     if (io) {

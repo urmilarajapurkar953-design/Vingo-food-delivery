@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
-import { FaClock, FaUtensils, FaMapMarkerAlt, FaCheckCircle, FaPizzaSlice, FaTruck, FaStoreAlt, FaMap } from 'react-icons/fa';
+import { FaClock, FaUtensils, FaMapMarkerAlt, FaCheckCircle, FaPizzaSlice, FaTruck, FaStoreAlt, FaMap, FaMoneyBillWave, FaCreditCard } from 'react-icons/fa';
 
 import OrderTrackingMap from '../components/OrderTrackingMap';
 // Pull Shared Named Hook from Hooks Folder
@@ -152,6 +152,9 @@ const UserOrderPage = ({ currentUser }) => {
             const currentOrderIdStr = String(masterOrder._id);
             const isMapActive = activeMapOrderId === currentOrderIdStr;
 
+            // Check if payment method is Cash on Delivery
+            const isCOD = masterOrder.paymentMethod === 'COD' || masterOrder.paymentMethod === 'Cash on Delivery';
+
             // 1. Check if any sub-order within this master block is currently in transit
             const trackableSubOrder = masterOrder.shopOrders?.find(sub => 
               ['Driver Assigned', 'Out for Delivery', 'On Way'].includes(sub.status)
@@ -221,7 +224,7 @@ const UserOrderPage = ({ currentUser }) => {
                       <span>To: <strong>{masterOrder.deliveryAddress?.text}</strong></span>
                     </div>
                     
-                    <div className="flex items-center gap-4">
+                    <div className="flex items-center gap-4 flex-wrap sm:flex-nowrap">
                       
                       {/* CRITICAL ACTION: Only render map navigation button frames if the order is NOT completely delivered */}
                       {!isEverythingDelivered && (
@@ -250,9 +253,22 @@ const UserOrderPage = ({ currentUser }) => {
                         </>
                       )}
 
-                      <div className="text-sm text-gray-800 font-bold">
-                        Total Paid: <span className="text-lg font-black text-[#ff4d2d]">₹{masterOrder.totalAmount}</span>
+                      {/* DYNAMIC PAYMENT METHOD HOUSING */}
+                      <div className="flex items-center gap-3">
+                        <span className={`flex items-center gap-1 px-2.5 py-1 rounded-xl text-[11px] font-black border tracking-wide uppercase transition-all ${
+                          isCOD 
+                            ? 'bg-amber-50 text-amber-700 border-amber-200/70' 
+                            : 'bg-green-50 text-green-700 border-green-200/70'
+                        }`}>
+                          {isCOD ? <FaMoneyBillWave size={11} /> : <FaCreditCard size={11} />}
+                          {isCOD ? "COD" : "Prepaid"}
+                        </span>
+
+                        <div className="text-sm text-gray-800 font-bold whitespace-nowrap">
+                          {isCOD ? "Total to Pay:" : "Total Paid:"} <span className="text-lg font-black text-[#ff4d2d]">₹{masterOrder.totalAmount}</span>
+                        </div>
                       </div>
+
                     </div>
                   </div>
 
