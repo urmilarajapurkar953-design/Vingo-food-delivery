@@ -76,6 +76,37 @@ const OwnerOrderPage = ({ currentOwnerId }) => {
             item.subOrderId === subOrderId ? { ...item, status: targetStatus } : item
           )
         );
+
+        // ⚡ REAL-TIME DISPATCH: If status is updated to Out for Delivery, alert the driver network!
+        if (targetStatus === 'Out for Delivery' && socket) {
+          // Look up corresponding order information metrics from state
+          const contextualOrder = shopOrders.find(item => item.subOrderId === subOrderId);
+          if (contextualOrder) {
+            socket.emit('joinRoom', masterOrderId.toString()); // Ensure joined to master room
+            
+            // Format dynamic dispatch packet mapping your delivery boy's criteria
+            const dispatchJobPayload = {
+              _id: subOrderId, 
+              subOrderId: subOrderId,
+              masterOrderId: masterOrderId,
+              shopName: contextualOrder.shopName || contextualOrder.shop?.name || "Store Merchant",
+              shopAddress: contextualOrder.shopAddress || contextualOrder.shop?.address || "Store Address",
+              deliveryAddress: contextualOrder.deliveryAddress,
+              subTotal: contextualOrder.subTotal || contextualOrder.orderValue || 0,
+              paymentMethod: contextualOrder.paymentMethod || "COD",
+              createdAt: new Date().toISOString()
+            };
+
+            // Send notification globally to all connected delivery boys
+            socket.emit('shareRiderLocationUpdate', {
+              assignmentId: "delivery_drivers_room",
+              isGlobalBroadcastJob: true, 
+              jobData: dispatchJobPayload
+            });
+            
+            console.log("🛵 Sent real-time dispatch request alert payload downstream:", dispatchJobPayload);
+          }
+        }
       }
     } catch (err) {
       console.error(err);

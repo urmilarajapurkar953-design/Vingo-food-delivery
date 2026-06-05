@@ -45,12 +45,17 @@ io.on("connection", (socket) => {
         socket.join(userId.toString());
         console.log(`👤 User registered inside real-time notification room: ${userId}`);
     });
+
+    // 🛵 NEW: Registers delivery boys into a global broadcast channel for incoming dispatch alerts
+    socket.on("joinDeliveryRoom", () => {
+        socket.join("delivery_drivers_room");
+        console.log(`🛵 Delivery Boy registered to live geo-radar broadcast channel.`);
+    });
     
     socket.on("disconnect", () => {
         console.log(`❌ Client disconnected from streaming room socket: ${socket.id}`);
     });
 });
-
 // Middleware
 app.use(cors({
     origin: "http://localhost:5173",

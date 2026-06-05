@@ -38,8 +38,6 @@ const DeliveryBoy = () => {
     }
   }, [activeDelivery]);
 
-  
-
   // 🌟 PERSISTENCE STEP 3: Query the backend on mount/refresh to find any already accepted runs
   useEffect(() => {
     const fetchExistingJobs = async () => {
@@ -52,16 +50,16 @@ const DeliveryBoy = () => {
           
           // If your backend endpoint returns the currently assigned active job in the payload, 
           // we use it to securely hydrate the active panel even if localStorage was cleared.
-         if (response.data.activeJob) {
-  const activeJobData = response.data.activeJob;
-  setActiveDelivery({
-    ...activeJobData,
-    // Safely pull total down if it's nested inside a master order object
-    subTotal: activeJobData.subTotal || activeJobData.orderValue || activeJobData.masterOrderId?.subTotal || activeJobData.orderId?.subTotal,
-    savedShopName: activeJobData.shopName || activeJobData.shop?.name || activeJobData.items?.[0]?.shopId?.name,
-    savedShopAddress: activeJobData.shopAddress || activeJobData.shop?.address || activeJobData.items?.[0]?.shopId?.address || activeJobData.storeAddress
-  });
-}
+          if (response.data.activeJob) {
+            const activeJobData = response.data.activeJob;
+            setActiveDelivery({
+              ...activeJobData,
+              // Safely pull total down if it's nested inside a master order object
+              subTotal: activeJobData.subTotal || activeJobData.orderValue || activeJobData.masterOrderId?.subTotal || activeJobData.orderId?.subTotal,
+              savedShopName: activeJobData.shopName || activeJobData.shop?.name || activeJobData.items?.[0]?.shopId?.name,
+              savedShopAddress: activeJobData.shopAddress || activeJobData.shop?.address || activeJobData.items?.[0]?.shopId?.address || activeJobData.storeAddress
+            });
+          }
         }
       } catch (error) {
         console.error("Error fetching initialized jobs:", error);
@@ -150,17 +148,17 @@ const DeliveryBoy = () => {
       );
 
       if (response.data.success) {
-  toast.success("Job accepted! Drive safely.");
-  
-  const acceptedJob = {
-    // 1. Start with your backend assignment properties
-    ...(response.data.assignment || {}),
-    // 2. Spread the original job object second so missing keys fall back to it
-    ...jobObject, 
-    // 3. Keep your custom shop mappings
-    savedShopName: jobObject.shopName || jobObject.shop?.name || jobObject.items?.[0]?.shopId?.name,
-    savedShopAddress: jobObject.shopAddress || jobObject.shop?.address || jobObject.items?.[0]?.shopId?.address || jobObject.storeAddress
-  };
+        toast.success("Job accepted! Drive safely.");
+        
+        const acceptedJob = {
+          // 1. Start with your backend assignment properties
+          ...(response.data.assignment || {}),
+          // 2. Spread the original job object second so missing keys fall back to it
+          ...jobObject, 
+          // 3. Keep your custom shop mappings
+          savedShopName: jobObject.shopName || jobObject.shop?.name || jobObject.items?.[0]?.shopId?.name,
+          savedShopAddress: jobObject.shopAddress || jobObject.shop?.address || jobObject.items?.[0]?.shopId?.address || jobObject.storeAddress
+        };
         setActiveDelivery(acceptedJob);
         setAvailableJobs((prevJobs) => 
           prevJobs.filter(job => (job.subOrderId || job.masterOrderId || job.assignmentId || job._id) !== targetId)
@@ -243,10 +241,11 @@ const DeliveryBoy = () => {
 
     let googleMapsUrl = "";
 
+    // Optimized production-ready universal Google Maps direction parameters
     if (destLat && destLng) {
-      googleMapsUrl = `http://maps.google.com/?saddr=${originShop}&daddr=${destLat},${destLng}&travelmode=driving`;
+      googleMapsUrl = `https://www.google.com/maps/dir/?api=1&origin=${originShop}&destination=${destLat},${destLng}&travelmode=driving`;
     } else if (destText) {
-      googleMapsUrl = `http://maps.google.com/?saddr=${originShop}&daddr=${destText}&travelmode=driving`;
+      googleMapsUrl = `https://www.google.com/maps/dir/?api=1&origin=${originShop}&destination=${destText}&travelmode=driving`;
     }
 
     if (googleMapsUrl) {
@@ -326,7 +325,6 @@ const DeliveryBoy = () => {
                         <div className="text-xl font-black text-gray-800 flex items-center justify-start md:justify-center gap-1">
                           <FaMoneyBillWave className="text-emerald-500 text-lg" /> ₹{job.subTotal || job.orderValue || 0}
                         </div>
-                        {/* Nearby Feed Payment Badge */}
                         <div className={`mt-1.5 flex items-center justify-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-black uppercase tracking-wider border mx-auto w-fit ${
                           isJobCOD 
                             ? "bg-amber-50 text-amber-700 border-amber-200" 
@@ -373,7 +371,6 @@ const DeliveryBoy = () => {
                   </div>
                 </div>
 
-                {/* 🌟 NEW PROFESSIONAL PAYMENT ACCOUNTABILITY STATUS CARD FOR RIDER */}
                 <div className={`p-4 rounded-xl border flex items-center justify-between shadow-sm ${
                   activeDelivery.paymentMethod === "COD" || activeDelivery.paymentMethod === "Cash on Delivery"
                     ? "bg-amber-50 border-amber-200 text-amber-900"
@@ -391,15 +388,14 @@ const DeliveryBoy = () => {
                   </div>
                   <div className="text-right">
                     <span className="text-xs font-mono font-black block bg-white/80 px-2 py-1 rounded-lg border border-black/5">
-{/* Replace the existing price rendering line with this comprehensive fallback mesh */}
-₹{activeDelivery.subTotal || 
-  activeDelivery.orderValue || 
-  activeDelivery.total || 
-  activeDelivery.grandTotal || 
-  activeDelivery.totalPaid || 
-  activeDelivery.price || 
-  0}                    </span>
-  
+                      ₹{activeDelivery.subTotal || 
+                        activeDelivery.orderValue || 
+                        activeDelivery.total || 
+                        activeDelivery.grandTotal || 
+                        activeDelivery.totalPaid || 
+                        activeDelivery.price || 
+                        0}
+                    </span>
                   </div>
                 </div>
 
