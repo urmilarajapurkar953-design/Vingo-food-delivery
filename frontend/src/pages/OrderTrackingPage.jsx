@@ -16,12 +16,17 @@ const OrderTrackingPage = () => {
 
   useEffect(() => {
     fetchTargetOrderDetails();
+  }, [masterOrderId, subOrderId]);
 
+  useEffect(() => {
     if (!socket) return;
 
+    // 🌟 Establish dynamic tracking stream exclusively for this sub-order instance room
+    socket.emit('joinOrderTrackingRoom', { subOrderId });
+
     socket.on('orderStatusUpdated', (data) => {
-      if (data.subOrderId.toString() === subOrderId.toString()) {
-        console.log("⚡ Live WebSocket Update Caught:", data);
+      if (data.subOrderId?.toString() === subOrderId?.toString()) {
+        console.log("⚡ Live WebSocket Status Update Caught:", data);
         setOrderData(prev => {
           if (!prev) return null;
           return {
@@ -33,10 +38,22 @@ const OrderTrackingPage = () => {
       }
     });
 
+    // 🌟 Enhanced real-time tracking radar listener
     socket.on('riderLocationUpdated', (data) => {
-      if (data.subOrderId === subOrderId || data.deliveryBoyId === orderData?.deliveryBoy?._id) {
+      console.log("📍 Telemetry Radar Signal Caught:", data);
+      
+      const currentRiderId = orderData?.deliveryBoy?._id || orderData?.deliveryBoy;
+      
+      // Correlate packet markers by matching target order identity parameters
+      if (
+        data.subOrderId?.toString() === subOrderId?.toString() || 
+        (data.deliveryBoyId && currentRiderId && data.deliveryBoyId.toString() === currentRiderId.toString())
+      ) {
         if (data.coords?.lat && data.coords?.lng) {
           setRiderCoords([data.coords.lat, data.coords.lng]);
+        } else if (data.coords && Array.isArray(data.coords)) {
+          // Fallback check if arrays format [lat, lng] are sent directly instead of nested keys
+          setRiderCoords([data.coords[0], data.coords[1]]);
         }
       }
     });
@@ -45,7 +62,7 @@ const OrderTrackingPage = () => {
       socket.off('orderStatusUpdated');
       socket.off('riderLocationUpdated');
     };
-  }, [socket, subOrderId, orderData?.deliveryBoy?._id]);
+  }, [socket, subOrderId, orderData?.deliveryBoy]);
 
   const fetchTargetOrderDetails = async () => {
     try {
@@ -60,7 +77,7 @@ const OrderTrackingPage = () => {
             deliveryBoy: subOrder.deliveryBoy || null,
             deliveryAddress: master.deliveryAddress,
             totalPaid: master.totalAmount,
-            paymentMethod: master.paymentMethod, // 🌟 Capturing structured payment format
+            paymentMethod: master.paymentMethod, 
             createdAt: master.createdAt
           });
 
@@ -79,7 +96,6 @@ const OrderTrackingPage = () => {
   if (loading) return <div className="text-center py-20 font-bold text-gray-500">Loading live radar stream...</div>;
   if (!orderData) return <div className="text-center py-20 text-gray-400">Tracking file could not be verified.</div>;
 
-  // Professional formatting helper for payment indicators
   const isCOD = orderData.paymentMethod === "COD" || orderData.paymentMethod === "Cash on Delivery";
 
   return (
@@ -94,7 +110,6 @@ const OrderTrackingPage = () => {
           <FaArrowLeft size={14} /> Back to My Orders
         </button>
         
-        {/* 🌟 NEW: Professional Payment Method Badge View Block */}
         <div className="flex items-center gap-3">
           <div className={`flex items-center gap-2 px-3.5 py-1.5 rounded-xl text-xs font-black uppercase tracking-wider border ${
             isCOD 
@@ -187,7 +202,6 @@ const OrderTrackingPage = () => {
               ))}
             </div>
 
-            {/* 🌟 NEW: Live Summary Receipt Sub-Layer */}
             <div className="pt-3 border-t border-gray-100 space-y-1.5 text-xs">
               <div className="flex justify-between text-gray-500 font-medium">
                 <span>Subtotal Amount Due</span>
