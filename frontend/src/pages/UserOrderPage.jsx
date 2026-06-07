@@ -1,11 +1,79 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
-import { FaClock, FaUtensils, FaMapMarkerAlt, FaCheckCircle, FaPizzaSlice, FaTruck, FaStoreAlt, FaMap, FaMoneyBillWave, FaCreditCard } from 'react-icons/fa';
+import { 
+  FaClock, FaUtensils, FaMapMarkerAlt, FaCheckCircle, FaPizzaSlice, 
+  FaTruck, FaStoreAlt, FaMap, FaMoneyBillWave, FaCreditCard, FaStar 
+} from 'react-icons/fa';
 
 import OrderTrackingMap from '../components/OrderTrackingMap';
 // Pull Shared Named Hook from Hooks Folder
 import { useSocket } from '../hooks/useSocket';
+
+// 🌟 New Inline Sub-Component for handling Item Ratings interactively
+const ItemRatingWidget = ({ itemId, subOrderId }) => {
+  const [rating, setRating] = useState(0);
+  const [hover, setHover] = useState(0);
+  const [isSubmitted, setIsSubmitted] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+
+  // Fetch existing rating on load if your database schema already supports it
+  // Otherwise, it defaults to 0 stars ready for user interaction.
+
+  const handleRatingSubmit = async (selectedRating) => {
+    setRating(selectedRating);
+    setSubmitting(true);
+    try {
+      // Replace with your exact back-end rating endpoint
+      const res = await axios.post(
+        'http://localhost:8000/api/orders/rate-item', 
+        { itemId, subOrderId, rating: selectedRating },
+        { withCredentials: true }
+      );
+      if (res.data.success) {
+        setIsSubmitted(true);
+      }
+    } catch (err) {
+      console.error("Failed to submit item rating feedback:", err);
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  if (isSubmitted) {
+    return (
+      <span className="text-[10px] font-bold text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-md border border-emerald-100 flex items-center gap-1 mt-1 w-fit">
+        <FaCheckCircle size={10} /> Rated {rating} Stars!
+      </span>
+    );
+  }
+
+  return (
+    <div className="mt-1.5">
+      <p className="text-[10px] uppercase tracking-wider font-extrabold text-gray-400 mb-0.5">Rate this Item:</p>
+      <div className="flex items-center gap-1">
+        {[1, 2, 3, 4, 5].map((star) => (
+          <button
+            key={star}
+            type="button"
+            disabled={submitting}
+            className="bg-transparent border-none outline-none p-0 m-0 cursor-pointer transition-transform duration-100 hover:scale-125 disabled:opacity-50"
+            onClick={() => handleRatingSubmit(star)}
+            onMouseEnter={() => setHover(star)}
+            onMouseLeave={() => setHover(0)}
+          >
+            <FaStar
+              size={13}
+              className={`transition-colors duration-150 ${
+                star <= (hover || rating) ? 'text-amber-400' : 'text-gray-200'
+              }`}
+            />
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+};
 
 const UserOrderPage = ({ currentUser }) => {
   const [orders, setOrders] = useState([]);
@@ -83,7 +151,6 @@ const UserOrderPage = ({ currentUser }) => {
       { key: ['Completed', 'Delivered'], icon: FaCheckCircle, label: 'Delivered' }
     ];
 
-    // Check if the order route is finished
     const isFullyDelivered = ['Completed', 'Delivered'].includes(currentStatus);
     const currentIdx = stages.findIndex(s => s.key.includes(currentStatus));
 
@@ -92,7 +159,6 @@ const UserOrderPage = ({ currentUser }) => {
         {stages.map((stage, idx) => {
           const Icon = stage.icon;
           
-          // If completely delivered, drop active line progress metrics to false
           const isDone = isFullyDelivered ? false : idx <= currentIdx;
           const isActive = isFullyDelivered ? false : idx === currentIdx;
 
@@ -152,15 +218,12 @@ const UserOrderPage = ({ currentUser }) => {
             const currentOrderIdStr = String(masterOrder._id);
             const isMapActive = activeMapOrderId === currentOrderIdStr;
 
-            // Check if payment method is Cash on Delivery
             const isCOD = masterOrder.paymentMethod === 'COD' || masterOrder.paymentMethod === 'Cash on Delivery';
 
-            // 1. Check if any sub-order within this master block is currently in transit
             const trackableSubOrder = masterOrder.shopOrders?.find(sub => 
               ['Driver Assigned', 'Out for Delivery', 'On Way'].includes(sub.status)
             );
 
-            // 2. Check if all items in this order are already finished/delivered
             const isEverythingDelivered = masterOrder.shopOrders?.every(sub => 
               ['Completed', 'Delivered'].includes(sub.status)
             );
@@ -178,42 +241,58 @@ const UserOrderPage = ({ currentUser }) => {
                 </div>
 
                 <div className="p-5 space-y-8">
-                  {masterOrder.shopOrders.map((shopOrder) => (
-                    <div key={shopOrder._id} className="border-b border-gray-100 last:border-0 pb-6 last:pb-0">
-                      
-                      <div className="flex justify-between items-center mb-3">
-                        <div className="flex items-center gap-2">
-                          {shopOrder.shop?.image ? (
-                            <img src={shopOrder.shop.image} className="w-8 h-8 rounded-lg object-cover" alt="" />
-                          ) : (
-                            <div className="w-8 h-8 bg-neutral-100 rounded-lg flex items-center justify-center text-neutral-400"><FaStoreAlt size={14}/></div>
-                          )}
-                          <h3 className="text-sm font-extrabold text-gray-800">{shopOrder.shop?.name || 'Partner Shop'}</h3>
-                        </div>
-                        <span className={getStatusBadge(shopOrder.status)}>
-                          {shopOrder.status || 'Pending'}
-                        </span>
-                      </div>
+                  {masterOrder.shopOrders.map((shopOrder) => {
+                    // 🌟 Determine if this specific sub order container has finished delivery
+                    const isSubOrderDelivered = ['Completed', 'Delivered'].includes(shopOrder.status);
 
-                      {renderTrackingTimeline(shopOrder.status || 'Pending')}
-
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pl-2 mt-4">
-                        {shopOrder.shopOrderItems.map((itemObj, idx) => (
-                          <div key={idx} className="flex gap-3 items-center bg-gray-50/50 p-2.5 rounded-xl border border-gray-100/50">
-                            {itemObj.item?.image ? (
-                              <img src={itemObj.item.image} alt="" className="w-12 h-12 rounded-xl object-cover border" />
+                    return (
+                      <div key={shopOrder._id} className="border-b border-gray-100 last:border-0 pb-6 last:pb-0">
+                        
+                        <div className="flex justify-between items-center mb-3">
+                          <div className="flex items-center gap-2">
+                            {shopOrder.shop?.image ? (
+                              <img src={shopOrder.shop.image} className="w-8 h-8 rounded-lg object-cover" alt="" />
                             ) : (
-                              <div className="w-12 h-12 bg-orange-50 rounded-xl flex items-center justify-center text-orange-500"><FaUtensils size={14}/></div>
+                              <div className="w-8 h-8 bg-neutral-100 rounded-lg flex items-center justify-center text-neutral-400"><FaStoreAlt size={14}/></div>
                             )}
-                            <div>
-                              <p className="text-xs font-bold text-gray-800">{itemObj.item?.name || 'Menu Item'}</p>
-                              <p className="text-[11px] text-gray-400">Qty: <span className="text-gray-700 font-bold">{itemObj.quantity}</span> × ₹{itemObj.price}</p>
-                            </div>
+                            <h3 className="text-sm font-extrabold text-gray-800">{shopOrder.shop?.name || 'Partner Shop'}</h3>
                           </div>
-                        ))}
+                          <span className={getStatusBadge(shopOrder.status)}>
+                            {shopOrder.status || 'Pending'}
+                          </span>
+                        </div>
+
+                        {renderTrackingTimeline(shopOrder.status || 'Pending')}
+
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pl-2 mt-4">
+                          {shopOrder.shopOrderItems.map((itemObj, idx) => (
+                            <div key={idx} className="flex gap-3 items-center bg-gray-50/50 p-2.5 rounded-xl border border-gray-100/50 justify-between">
+                              <div className="flex gap-3 items-center">
+                                {itemObj.item?.image ? (
+                                  <img src={itemObj.item.image} alt="" className="w-12 h-12 rounded-xl object-cover border" />
+                                ) : (
+                                  <div className="w-12 h-12 bg-orange-50 rounded-xl flex items-center justify-center text-orange-500"><FaUtensils size={14}/></div>
+                                )}
+                                <div>
+                                  <p className="text-xs font-bold text-gray-800">{itemObj.item?.name || 'Menu Item'}</p>
+                                  <p className="text-[11px] text-gray-400">Qty: <span className="text-gray-700 font-bold">{itemObj.quantity}</span> × ₹{itemObj.price}</p>
+                                  
+                                  {/* 🌟 Conditional Star Assessment Injection Block */}
+                                  {isSubOrderDelivered && (
+                                    <ItemRatingWidget 
+                                      itemId={itemObj.item?._id || itemObj.item} 
+                                      subOrderId={shopOrder._id} 
+                                    />
+                                  )}
+                                </div>
+                              </div>
+                              <span className="text-xs font-bold text-gray-700 self-start mt-1">₹{itemObj.price * itemObj.quantity}</span>
+                            </div>
+                          ))}
+                        </div>
                       </div>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
 
                 {/* Bottom Address and Actions Bar */}
@@ -226,7 +305,6 @@ const UserOrderPage = ({ currentUser }) => {
                     
                     <div className="flex items-center gap-4 flex-wrap sm:flex-nowrap">
                       
-                      {/* CRITICAL ACTION: Only render map navigation button frames if the order is NOT completely delivered */}
                       {!isEverythingDelivered && (
                         <>
                           {trackableSubOrder ? (
@@ -253,7 +331,6 @@ const UserOrderPage = ({ currentUser }) => {
                         </>
                       )}
 
-                      {/* DYNAMIC PAYMENT METHOD HOUSING */}
                       <div className="flex items-center gap-3">
                         <span className={`flex items-center gap-1 px-2.5 py-1 rounded-xl text-[11px] font-black border tracking-wide uppercase transition-all ${
                           isCOD 
@@ -272,7 +349,6 @@ const UserOrderPage = ({ currentUser }) => {
                     </div>
                   </div>
 
-                  {/* Fallback inline direction block helper if clicked, not dispatched, and not finished */}
                   {isMapActive && !trackableSubOrder && !isEverythingDelivered && (
                     <div className="mt-2 w-full min-h-[400px] h-[400px] block bg-white rounded-2xl border border-gray-100 overflow-hidden relative shadow-md">
                       <OrderTrackingMap 

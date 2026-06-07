@@ -5,6 +5,7 @@ import User from "../models/user.model.js";
 import DeliveryAssignment from "../models/deliveryAssignment.model.js";
 import Razorpay from "razorpay";
 import crypto from "crypto";
+import Review from "../models/Review.js";
 
 const razorpayInstance = new Razorpay({
   key_id: process.env.RAZORPAY_KEY_ID,
@@ -466,5 +467,74 @@ export const getAvailableJobs = async (req, res) => {
     return res.status(200).json({ success: true, jobs: broadcastedJobs });
   } catch (error) {
     return res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+export const rateItem = async (req, res) => {
+  try {
+    const { itemId, subOrderId, rating } = req.body;
+    const userId = req.user._id; // Extracted from your auth middleware
+
+    // 1. Basic Validation
+    if (!itemId || !subOrderId || !rating) {
+      return res.status(400).json({ 
+        success: false, 
+        message: "Missing required rating parameters (itemId, subOrderId, rating)." 
+      });
+    }
+
+    if (rating < 1 || rating > 5) {
+      return res.status(400).json({ 
+        success: false, 
+        message: "Rating scale must fall between 1 and 5 stars." 
+      });
+    }
+
+    // 2. Check if the user has already rated this specific item for this order
+    const existingReview = await Review.findOne({ userId, subOrderId, itemId });
+    if (existingReview) {
+      return res.status(400).json({
+        success: false,
+        message: "You have already submitted a rating for this item."
+      });
+    }
+
+    // 3. Create and commit the review ledger record
+    const newReview = new Review({
+      userId,
+      itemId,
+      subOrderId,
+      rating
+    });
+    await newReview.save();
+
+    // 4. (Optional) Mark item as rated inside the master order database record
+    // This allows the frontend to remember it's rated even if the user clears local component states.
+    await Order.updateOne(
+      { "shopOrders._id": subOrderId, "shopOrders.shopOrderItems.item": itemId },
+      { 
+        $set: { "shopOrders.$[outer].shopOrderItems.$[inner].isRated": true } 
+      },
+      {
+        arrayFilters: [
+          { "outer._id": subOrderId },
+          { "inner.item": itemId }
+        ]
+      }
+    );
+
+    return res.status(201).json({
+      success: true,
+      message: "Thank you! Your rating has been successfully logged.",
+      review: newReview
+    });
+
+  } catch (error) {
+    console.error("CRITICAL error registering item rating stream:", error);
+    return res.status(500).json({
+      success: false,
+      message: "Internal server compilation fault updating product metrics.",
+      error: error.message
+    });
   }
 };
