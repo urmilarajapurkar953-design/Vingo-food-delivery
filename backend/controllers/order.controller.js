@@ -538,3 +538,67 @@ export const rateItem = async (req, res) => {
     });
   }
 };
+
+// Append directly inside your backend/controllers/order.controller.js file
+
+export const getRiderDeliveryHistory = async (req, res) => {
+  try {
+    const riderId = req.user._id; // Extracted safely from your isAuth middleware context
+
+    // Find orders where this delivery boy was assigned and status is completed/delivered
+    const orders = await Order.find({
+      "shopOrders.deliveryBoy": riderId,
+      "shopOrders.status": { $in: ["Completed", "Delivered"] }
+    })
+    .sort({ createdAt: -1 })
+    .populate("shopOrders.shop", "name image")
+    .populate("shopOrders.shopOrderItems.item", "name image");
+
+    // Flatten and filter only sub-orders matching this rider
+    let historyList = [];
+
+    orders.forEach(masterOrder => {
+      masterOrder.shopOrders.forEach(subOrder => {
+        if (subOrder.deliveryBoy && subOrder.deliveryBoy.toString() === riderId.toString() && ["Completed", "Delivered"].includes(subOrder.status)) {
+          
+          // Calculate sum of quantities for this sub-order
+          const totalItemsCount = subOrder.shopOrderItems.reduce((sum, item) => sum + item.quantity, 0);
+
+          // Approximate payment calculation or use standard sub-order total fields if present
+          const calculatedSubTotal = subOrder.shopOrderItems.reduce((sum, item) => sum + (item.price * item.quantity), 0);
+
+          historyList.push({
+            masterOrderId: masterOrder._id,
+            subOrderId: subOrder._id,
+            shopName: subOrder.shop?.name || "Partner Shop",
+            shopImage: subOrder.shop?.image || "",
+            items: subOrder.shopOrderItems.map(io => ({
+              name: io.item?.name || "Menu Item",
+              quantity: io.quantity,
+              price: io.price
+            })),
+            itemCount: totalItemsCount,
+            amount: calculatedSubTotal,
+            paymentMethod: masterOrder.paymentMethod || "COD",
+            deliveryAddress: masterOrder.deliveryAddress?.text || "Customer Address",
+            completedAt: subOrder.updatedAt || masterOrder.updatedAt // tracks terminal execution time
+          });
+        }
+      });
+    });
+
+    return res.status(200).json({
+      success: true,
+      count: historyList.length,
+      history: historyList
+    });
+
+  } catch (error) {
+    console.error("Error aggregating rider delivery profiles:", error);
+    return res.status(500).json({
+      success: false,
+      message: "Internal configuration server error building rider analytics.",
+      error: error.message
+    });
+  }
+};

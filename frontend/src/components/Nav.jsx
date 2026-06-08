@@ -3,6 +3,7 @@ import { FaLocationDot, FaPlus } from "react-icons/fa6";
 import { IoIosSearch, IoIosClose } from 'react-icons/io';
 import { FiShoppingCart } from 'react-icons/fi';
 import { LuLayoutList } from "react-icons/lu"; 
+import { MdHistory } from "react-icons/md"; // Added cleaner history icon
 import { useSelector, useDispatch } from 'react-redux'; 
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import axios from 'axios';
@@ -165,6 +166,17 @@ function Nav() {
           </>
         )}
 
+        {/* Delivery Boy Specific Actions Injection Node */}
+        {isDelivery && (
+          <button 
+            onClick={() => navigate('/delivery-history')}
+            className='flex items-center gap-2 text-gray-700 hover:text-[#ff4d2d] transition-all font-bold text-sm bg-orange-50 hover:bg-orange-100/70 border border-orange-200/50 px-3.5 py-1.5 rounded-xl group'
+          >
+            <MdHistory size={18} className='text-[#ff4d2d] group-hover:rotate-[-12deg] transition-transform' />
+            <span>Delivery History</span>
+          </button>
+        )}
+
         {/* Owner Specific Actions */}
         {isOwner && (
           <div className='flex items-center gap-5 md:gap-8'>
@@ -226,6 +238,15 @@ function Nav() {
                         {userBadgeCount}
                       </span>
                     )}
+                  </button>
+                )}
+
+                {isDelivery && (
+                  <button 
+                    onClick={() => { navigate('/delivery-history'); setShowInfo(false); }}
+                    className='text-gray-700 font-bold text-sm text-left hover:bg-orange-50 p-2 rounded-lg transition-colors w-full'
+                  >
+                    Delivery History
                   </button>
                 )}
                 

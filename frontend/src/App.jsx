@@ -24,6 +24,7 @@ import { SocketProvider } from './context/SocketContext';
 import OrderTrackingPage from './pages/OrderTrackingPage';
 import ShopDetails from './components/ShopDetails'; 
 import SearchPage from './components/SearchPage';
+import DeliveryHistory from './pages/DeliveryHistory';
 
 export const serverUrl = 'http://localhost:8000';
 
@@ -127,6 +128,7 @@ function App() {
         <Route path="/order-tracking/:masterOrderId/:subOrderId" element={<OrderTrackingPage />} />
         <Route path="/shop/:shopId" element={<ShopDetails />} />
         <Route path="/search" element={<SearchPage />} />
+        <Route path="/delivery-history" element={<DeliveryHistory />} />
 
         <Route path="*" element={<div>404 - Not Found</div>} />
       </Routes>

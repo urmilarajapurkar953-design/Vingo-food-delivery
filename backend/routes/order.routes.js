@@ -5,7 +5,8 @@ import {
   getUserOrders, 
   getOwnerShopOrders, 
   updateSubOrderStatus,
-  rateItem 
+  rateItem,
+  getRiderDeliveryHistory
 } from "../controllers/order.controller.js"; 
 
 const orderRouter = express.Router();
@@ -18,5 +19,6 @@ orderRouter.get("/owner-dashboard", isAuth, getOwnerShopOrders);
 orderRouter.put("/update-status", isAuth, updateSubOrderStatus);
 
 orderRouter.post("/rate-item", isAuth, rateItem);
+orderRouter.get("/rider-history", isAuth, getRiderDeliveryHistory);
 
 export default orderRouter;
