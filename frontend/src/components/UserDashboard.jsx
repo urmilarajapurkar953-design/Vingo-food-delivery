@@ -115,10 +115,9 @@ function UserDashboard() {
   }
 
   return (
-    <div className='w-full flex flex-col gap-8 items-center bg-[#fff9f6] pb-20 px-4 pt-20'>
-      
-      {/* CATEGORY SLIDER */}
-      <div className="w-full max-w-6xl mt-8">
+<div className='w-full flex flex-col items-center bg-[#fff9f6] pb-20 px-4 pt-11 -mt-10 relative z-10'>
+        {/* CATEGORY SLIDER */}
+      <div className="w-full max-w-6xl">
         <div className="flex justify-between items-center mb-5">
           <h1 className='text-gray-800 text-2xl font-bold'>Inspiration for your first order</h1>
           
@@ -163,8 +162,8 @@ function UserDashboard() {
       </div>
 
       {/* SHOPS GRID */}
-      <div className="w-full max-w-6xl">
-        <h1 className='text-gray-800 text-2xl font-bold mb-6 capitalize'>
+<div className="w-full max-w-6xl mt-12">
+          <h1 className='text-gray-800 text-2xl font-bold mb-6 capitalize'>
           {currentCity ? `Best shops in ${currentCity}` : "Best shops near you"}
         </h1>
         <div className='grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-8'>
@@ -197,8 +196,8 @@ function UserDashboard() {
       </div>
 
       {/* SUGGESTED ITEMS GRID */}
-      <div className="w-full max-w-6xl">
-        <h1 className='text-gray-800 text-2xl font-bold mb-6 flex items-center gap-2'>
+<div className="w-full max-w-6xl mt-12">
+          <h1 className='text-gray-800 text-2xl font-bold mb-6 flex items-center gap-2'>
           {searchQuery 
             ? `Search results for "${searchQuery}" near ${currentCity || 'you'}` 
             : (selectedCategory && selectedCategory !== "null") ? `${selectedCategory} Options` : "Suggested items"

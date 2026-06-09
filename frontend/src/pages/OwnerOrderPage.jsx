@@ -238,9 +238,9 @@ const OwnerOrderPage = ({ currentOwnerId }) => {
                     <div className="text-xs text-neutral-500">
                       Payment Method: <strong className="text-neutral-700 block uppercase text-[10px] tracking-wider">{order.paymentMethod || "COD"}</strong>
                     </div>
-                    <div className="text-xs text-neutral-500 border-l pl-4 border-neutral-200">
-                      Shop Subtotal: <strong className="text-base font-black text-neutral-800 block">₹{order.subTotal}</strong>
-                    </div>
+<div className="text-xs text-neutral-500 border-l pl-4 border-neutral-200">
+  Total Amount: <strong className="text-base font-black text-neutral-800 block">₹{Number(order.subTotal) + 40}</strong>
+</div>
                     
                     <div className="text-xs text-neutral-500 border-l pl-4 border-neutral-200 flex items-center gap-2">
                       <span>Current Status:</span> 

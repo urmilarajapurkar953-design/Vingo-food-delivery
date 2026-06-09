@@ -146,6 +146,7 @@ export const verifyPaymentAndPlaceOrder = async (req, res) => {
             shop: subOrder.shop,
             items: subOrder.shopOrderItems,
             subTotal: subOrder.subTotal,
+            totalWithDelivery: Number(subOrder.subTotal) + 40, // 🌟 Inject combined absolute metrics here
             createdAt: fullyPopulatedOrder.createdAt
           });
         }
@@ -249,6 +250,7 @@ export const placeOrder = async (req, res) => {
             shop: subOrder.shop,
             items: subOrder.shopOrderItems,
             subTotal: subOrder.subTotal,
+            totalWithDelivery: Number(subOrder.subTotal) + 40, // 🌟 Inject combined absolute metrics here
             createdAt: fullyPopulatedOrder.createdAt
           });
         }
@@ -330,6 +332,7 @@ export const getOwnerShopOrders = async (req, res) => {
             shop: subOrder.shop,
             items: subOrder.shopOrderItems,
             subTotal: subOrder.subTotal,
+            totalWithDelivery: Number(subOrder.subTotal) + 40, // 🌟 Add calculated absolute total field
             createdAt: masterOrder.createdAt
           });
         }
@@ -396,10 +399,13 @@ export const updateSubOrderStatus = async (req, res) => {
         });
         await newAssignment.save();
 
-        // 🌟 PROFESSIONAL RIDER EXTRACTION: Compute payment instructions upfront for the broadcast alert
+        // Calculate the absolute total including the delivery fee (40)
+        const totalWithDelivery = Number(subOrder.subTotal) + 40;
+
+        // Compute direct instructions using the final price
         const isCOD = updatedMasterOrder.paymentMethod === "COD" || updatedMasterOrder.paymentMethod === "Cash on Delivery";
         const collectionInstruction = isCOD 
-          ? `COLLECT CASH AT DOORSTEP: ₹${subOrder.subTotal}` 
+          ? `COLLECT CASH AT DOORSTEP: ₹${totalWithDelivery}` 
           : "PREPAID ORDER - DO NOT COLLECT CASH";
 
         if (io) {
@@ -411,9 +417,9 @@ export const updateSubOrderStatus = async (req, res) => {
               shopName: activeShop?.name || "Local Kitchen",
               shopAddress: activeShop?.text || activeShop?.address || "Store Address",
               deliveryAddress: updatedMasterOrder.deliveryAddress,
-              subTotal: subOrder.subTotal,
-              paymentMethod: isCOD ? "COD" : "Online (Prepaid)", // 🌟 explicit declaration string
-              collectionInstruction: collectionInstruction      // 🌟 direct visual render message
+              subTotal: totalWithDelivery, // Sends total amount directly to driver console
+              paymentMethod: isCOD ? "COD" : "Online (Prepaid)", 
+              collectionInstruction: collectionInstruction      
             });
           });
         }
@@ -425,7 +431,6 @@ export const updateSubOrderStatus = async (req, res) => {
     return res.status(500).json({ success: false, message: error.message });
   }
 };
-
 // ==========================================
 // 7. GET AVAILABLE JOBS FOR DELIVERY BOYS (REST ENDPOINT ARR)
 // ==========================================
