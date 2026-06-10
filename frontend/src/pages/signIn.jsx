@@ -1,28 +1,24 @@
-import React, { useState, useEffect } from 'react'; // Added useEffect
+import React, { useState, useEffect } from 'react'; 
 import { useNavigate } from 'react-router-dom';
 import { FcGoogle } from "react-icons/fc";
 import axios from 'axios';
 import toast from 'react-hot-toast';
 import { GoogleAuthProvider, signInWithPopup } from 'firebase/auth';
 import { auth } from '../../firebase';
-import { useDispatch, useSelector } from 'react-redux'; // Added useSelector
+import { useDispatch, useSelector } from 'react-redux'; 
 import { setUserData } from '../redux/user.Slice';
 
 function SignIn() {
   const navigate = useNavigate();
   const dispatch = useDispatch();
   
-  // Define primaryColor since it was used but not defined
   const primaryColor = "#ff4d2d";
-  
-  // Get userData to watch for successful login
   const { userData } = useSelector((state) => state.user || {});
   
   const [loading, setLoading] = useState(false);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
 
-  // Redirect automatically when userData is populated in Redux
   useEffect(() => {
     if (userData) {
       console.log("User detected, navigating home...");
@@ -38,7 +34,9 @@ function SignIn() {
 
     try {
       const result = await axios.post(`http://localhost:8000/api/auth/signin`, { email, password }, { withCredentials: true });
-      dispatch(setUserData(result.data));
+      const userProfile = result.data.user || result.data.data || result.data;
+      
+      dispatch(setUserData(userProfile));
       toast.success("Signed in!", { id: loadingToast });
     } catch (error) {
       toast.error(error.response?.data?.message || "Sign-in failed", { id: loadingToast });
@@ -60,9 +58,10 @@ function SignIn() {
         { withCredentials: true }
       );
 
-      dispatch(setUserData(dbResponse.data)); 
+      const userProfile = dbResponse.data.user || dbResponse.data.data || dbResponse.data;
+
+      dispatch(setUserData(userProfile)); 
       toast.success("Welcome back!", { id: loadingToast });
-      
     } catch (error) {
       console.error("Auth Error:", error);
       toast.error("Google login failed", { id: loadingToast });
@@ -78,14 +77,35 @@ function SignIn() {
         <p className='text-gray-600 mb-8'>Welcome back! Please sign in.</p>
 
         <div className='mb-4'>
-          <label className='block text-gray-700 font-medium mb-1'>Email</label>
-          <input type="email" className='w-full border rounded-lg px-3 py-2' value={email} onChange={(e) => setEmail(e.target.value)} />
-        </div>
+  <label className='block text-gray-700 font-medium mb-1'>Email</label>
+  <input 
+    type="email" 
+    className='w-full border rounded-lg px-3 py-2' 
+    value={email} 
+    onChange={(e) => setEmail(e.target.value)} 
+  />
+</div>
 
-        <div className='mb-4'>
-          <label className='block text-gray-700 font-medium mb-1'>Password</label>
-          <input type="password" className='w-full border rounded-lg px-3 py-2' value={password} onChange={(e) => setPassword(e.target.value)} />
-        </div>
+<div className='mb-4'>
+  <label className='block text-gray-700 font-medium mb-1'>Password</label>
+  <input 
+    type="password" 
+    className='w-full border rounded-lg px-3 py-2' 
+    value={password} 
+    onChange={(e) => setPassword(e.target.value)} 
+  />
+  
+  {/* Container to push the link below the input box to the right corner */}
+  <div className='flex justify-end mt-1.5'>
+    <span 
+      onClick={() => navigate('/forgot-password')} 
+      className='text-xs font-medium cursor-pointer hover:underline'
+      style={{ color: primaryColor }}
+    >
+      Forgot Password?
+    </span>
+  </div>
+</div>
 
         <button
           disabled={loading}
@@ -113,4 +133,4 @@ function SignIn() {
   );
 }
 
-export default SignIn; // <--- MUST HAVE THIS LINE
+export default SignIn;
