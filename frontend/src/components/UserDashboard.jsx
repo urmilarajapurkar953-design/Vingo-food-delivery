@@ -8,12 +8,32 @@ import { serverUrl } from '../App';
 import { addToCart, decrementQuantity } from '../redux/user.Slice.js'; 
 import { useNavigate, useSearchParams } from 'react-router-dom';
 
+// 🌟 SKELETON LOADERS FOR SMOOTH TRANSITIONS
+const ShopSkeleton = () => (
+  <div className="animate-pulse flex flex-col w-full">
+    <div className="h-52 md:h-60 bg-gray-200 rounded-3xl w-full"></div>
+    <div className="h-5 bg-gray-200 rounded w-2/3 mt-4"></div>
+    <div className="h-4 bg-gray-200 rounded w-1/3 mt-2"></div>
+  </div>
+);
+
+const ItemSkeleton = () => (
+  <div className="animate-pulse bg-white rounded-3xl p-3 border border-gray-100 shadow-sm w-full">
+    <div className="h-44 bg-gray-200 rounded-2xl w-full"></div>
+    <div className="h-5 bg-gray-200 rounded w-3/4 mt-4"></div>
+    <div className="h-3 bg-gray-200 rounded w-1/2 mt-1"></div>
+    <div className="flex justify-between items-center mt-4">
+      <div className="h-5 bg-gray-200 rounded w-1/4"></div>
+      <div className="h-8 bg-gray-200 rounded-2xl w-1/3"></div>
+    </div>
+  </div>
+);
+
 function UserDashboard() {
   const scrollRef = useRef(null);
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   
-  // 🌟 FIXED: Safely extract search query without letting it turn into a "null" string
   const rawSearch = searchParams.get('search');
   const searchQuery = (rawSearch && rawSearch !== "null") ? rawSearch.toLowerCase().trim() : "";
 
@@ -23,14 +43,11 @@ function UserDashboard() {
   const [loading, setLoading] = useState(true);
   const [suggestedItems, setSuggestedItems] = useState([]);
   const [itemsLoading, setItemsLoading] = useState(true);
-  
-  // Tracks which category is currently selected by the user
   const [selectedCategory, setSelectedCategory] = useState(null);
 
   const dispatch = useDispatch();
   const { currentCity, cartItem } = useSelector((state) => state.user || { cartItem: [] });
 
-  // Connect Local UI to Redux State
   const getItemQty = (itemId) => {
     const item = cartItem.find((i) => i._id === itemId);
     return item ? item.quantity : 0;
@@ -58,7 +75,7 @@ function UserDashboard() {
     scrollRef.current.scrollBy({ left: direction === 'left' ? -amount : amount, behavior: 'smooth' });
   };
 
-  // Fixed Shop Fetching logic
+  // Fetch Shops
   useEffect(() => {
     const fetchShops = async () => {
       if (currentCity === null) return; 
@@ -66,7 +83,6 @@ function UserDashboard() {
       setLoading(true);
       try {
         const cityQuery = (currentCity === "Location Denied" || currentCity === "Unknown Location") ? "" : currentCity;
-        
         const response = await axios.get(`${serverUrl}/api/v1/shops/all`, {
           params: { city: cityQuery }
         });
@@ -81,7 +97,7 @@ function UserDashboard() {
     fetchShops();
   }, [currentCity]);
 
-  // Fetch Items logic
+  // Fetch Items
   useEffect(() => {
     const fetchItems = async () => {
       if (!currentCity) return;
@@ -100,12 +116,10 @@ function UserDashboard() {
     fetchItems();
   }, [currentCity]);
 
-  // 🌟 FIXED STEP 1: Filter location-bound items by active Category Selection safely
   let filteredItems = (selectedCategory && selectedCategory !== "null")
     ? suggestedItems.filter(item => item.category?.toLowerCase() === selectedCategory.toLowerCase())
     : suggestedItems;
 
-  // 🌟 FIXED STEP 2: Filter location-bound items by Navbar Search Input text safely
   if (searchQuery) {
     filteredItems = filteredItems.filter(item => 
       item.name?.toLowerCase().includes(searchQuery) || 
@@ -115,13 +129,11 @@ function UserDashboard() {
   }
 
   return (
-<div className='w-full flex flex-col items-center bg-[#fff9f6] pb-20 px-4 pt-11 -mt-10 relative z-10'>
-        {/* CATEGORY SLIDER */}
+    <div className='w-full flex flex-col items-center bg-[#fff9f6] pb-20 px-4 pt-11 -mt-10 relative z-10'>
+      {/* CATEGORY SLIDER */}
       <div className="w-full max-w-6xl">
         <div className="flex justify-between items-center mb-5">
           <h1 className='text-gray-800 text-2xl font-bold'>Inspiration for your first order</h1>
-          
-          {/* Clear Filter Indicator button block */}
           {selectedCategory && selectedCategory !== "null" && (
             <button 
               onClick={() => setSelectedCategory(null)}
@@ -139,7 +151,6 @@ function UserDashboard() {
           <div ref={scrollRef} className='flex overflow-x-auto gap-4 py-4 no-scrollbar scroll-smooth'>
             {categories?.map((cate, i) => {
               const isSelected = selectedCategory?.toLowerCase() === cate.category?.toLowerCase();
-              
               return (
                 <div 
                   key={i} 
@@ -162,13 +173,18 @@ function UserDashboard() {
       </div>
 
       {/* SHOPS GRID */}
-<div className="w-full max-w-6xl mt-12">
-          <h1 className='text-gray-800 text-2xl font-bold mb-6 capitalize'>
-          {currentCity ? `Best shops in ${currentCity}` : "Best shops near you"}
+      <div className="w-full max-w-6xl mt-12">
+        <h1 className='text-gray-800 text-2xl font-bold mb-6 capitalize'>
+          {currentCity && currentCity !== "Unknown Location" ? `Best shops in ${currentCity}` : "Best shops near you"}
         </h1>
         <div className='grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-8'>
           {loading ? (
-            <p className="col-span-full text-center py-10 italic text-gray-400">Finding delicious spots...</p>
+            // 🌟 Render 3 elegant shimmer grid modules while loading
+            <>
+              <ShopSkeleton />
+              <ShopSkeleton />
+              <ShopSkeleton />
+            </>
           ) : allShops.length > 0 ? (
             allShops.map((shop) => (
               <div 
@@ -196,8 +212,8 @@ function UserDashboard() {
       </div>
 
       {/* SUGGESTED ITEMS GRID */}
-<div className="w-full max-w-6xl mt-12">
-          <h1 className='text-gray-800 text-2xl font-bold mb-6 flex items-center gap-2'>
+      <div className="w-full max-w-6xl mt-12">
+        <h1 className='text-gray-800 text-2xl font-bold mb-6 flex items-center gap-2'>
           {searchQuery 
             ? `Search results for "${searchQuery}" near ${currentCity || 'you'}` 
             : (selectedCategory && selectedCategory !== "null") ? `${selectedCategory} Options` : "Suggested items"
@@ -205,38 +221,34 @@ function UserDashboard() {
         </h1>
         <div className='grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6'>
           {itemsLoading ? (
-            <p className="col-span-full text-center italic text-gray-400">Loading items...</p>
+            // 🌟 Render 4 item shimmers while waiting for backend response
+            <>
+              <ItemSkeleton />
+              <ItemSkeleton />
+              <ItemSkeleton />
+              <ItemSkeleton />
+            </>
           ) : filteredItems.length > 0 ? (
             filteredItems.map((item) => {
               const itemQty = getItemQty(item._id);
-              
               return (
                 <div 
                   key={item._id} 
                   className="group bg-white rounded-3xl p-3 border border-transparent shadow-sm hover:shadow-xl hover:border-[#ff4d2d]/40 hover:-translate-y-1.5 transition-all duration-300 cursor-pointer"
                 >
                   <div className="relative h-44 w-full rounded-2xl overflow-hidden">
-                    <img 
-                      src={item.image} 
-                      alt={item.name} 
-                      className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" 
-                    />
+                    <img src={item.image} alt={item.name} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" />
                     <div className={`absolute top-2 right-2 px-2 py-1 rounded-full text-[10px] font-bold shadow-sm ${item.foodType === 'veg' ? 'bg-green-50/90 text-green-600' : 'bg-red-50/90 text-red-600'}`}>
                       {item.foodType}
                     </div>
                   </div>
 
                   <div className="mt-4">
-                    <h3 className="font-extrabold text-gray-800 truncate group-hover:text-[#ff4d2d] transition-colors">
-                      {item.name}
-                    </h3>
+                    <h3 className="font-extrabold text-gray-800 truncate group-hover:text-[#ff4d2d] transition-colors">{item.name}</h3>
                     <p className="text-xs text-gray-400 font-medium">{item.shop?.name || "Partner Shop"}</p>
                     
                     <div className="flex justify-between items-center mt-4">
-                      <span className="text-sm font-black text-[#ff4d2d]">
-                        ₹{item.price}
-                      </span>
-                      
+                      <span className="text-sm font-black text-[#ff4d2d]">₹{item.price}</span>
                       <div className="flex items-center bg-[#ff4d2d] text-white rounded-2xl overflow-hidden shadow-sm">
                         <button 
                           onClick={(e) => { e.stopPropagation(); dispatch(decrementQuantity(item._id)); }}
@@ -244,21 +256,14 @@ function UserDashboard() {
                         >
                           <FaMinus size={10} />
                         </button>
-                        
-                        <span className="px-1 font-bold text-xs min-w-[18px] text-center">
-                          {itemQty}
-                        </span>
-
+                        <span className="px-1 font-bold text-xs min-w-[18px] text-center">{itemQty}</span>
                         <button 
                           onClick={(e) => { e.stopPropagation(); dispatch(addToCart(item)); }}
                           className="p-2 border-r border-white/20 hover:bg-[#e64429] transition-colors cursor-pointer"
                         >
                           <FaPlus size={10} />
                         </button>
-
-                        <div className="p-2 bg-[#ff4d2d]">
-                          <FaShoppingCart size={12} />
-                        </div>
+                        <div className="p-2 bg-[#ff4d2d]"><FaShoppingCart size={12} /></div>
                       </div>
                     </div>
                   </div>
