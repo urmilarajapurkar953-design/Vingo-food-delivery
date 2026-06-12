@@ -12,6 +12,15 @@ const razorpayInstance = new Razorpay({
   key_secret: process.env.RAZORPAY_KEY_SECRET,
 });
 
+// =========================================================================
+// 📡 GLOBAL COMPATIBILITY UTILITY: INSENSITIVE CHECK MATCHING THE FRONTEND
+// =========================================================================
+const checkIfCOD = (paymentMethodString) => {
+  if (!paymentMethodString) return false;
+  const normalized = String(paymentMethodString).toLowerCase();
+  return normalized.includes('cod') || normalized.includes('cash');
+};
+
 // ==========================================
 // 1. INITIALIZE RAZORPAY ORDER ROUTINE
 // ==========================================
@@ -113,7 +122,7 @@ export const verifyPaymentAndPlaceOrder = async (req, res) => {
 
     const unifiedOrder = new Order({
       user: userId, 
-      paymentMethod,
+      paymentMethod: paymentMethod || "Online", 
       paymentStatus: "Paid", 
       razorpayOrderId: razorpay_order_id,
       razorpayPaymentId: razorpay_payment_id,
@@ -126,10 +135,10 @@ export const verifyPaymentAndPlaceOrder = async (req, res) => {
     const savedOrder = await unifiedOrder.save();
     const fullyPopulatedOrder = await Order.findById(savedOrder._id)
       .populate("user", "fullName name email phone")
-      .populate({ path: 'shopOrders.shop', select: 'name image text' })
+      .populate({ path: 'shopOrders.shop', select: 'name image text address' })
       .populate({ path: 'shopOrders.shopOrderItems.item', select: 'name price image' });
 
-    // ⚡ WebSocket Notification to Store Owner (Online Payment Mode Passed Explicitly)
+    // ⚡ WebSocket Notification to Store Owner
     const io = req.app.get("io");
     if (io && fullyPopulatedOrder) {
       fullyPopulatedOrder.shopOrders.forEach(subOrder => {
@@ -140,13 +149,13 @@ export const verifyPaymentAndPlaceOrder = async (req, res) => {
             subOrderId: subOrder._id,
             customer: fullyPopulatedOrder.user,
             deliveryAddress: fullyPopulatedOrder.deliveryAddress,
-            paymentMethod: "Online Payment (Razorpay)", // 🌟 Custom Clear Label For Owner Panel
-            paymentStatus: "Paid",                      // 🌟 explicit clarity
+            paymentMethod: "Online Payment", 
+            paymentStatus: "Paid",                     
             status: subOrder.status || "Pending",
             shop: subOrder.shop,
             items: subOrder.shopOrderItems,
             subTotal: subOrder.subTotal,
-            totalWithDelivery: Number(subOrder.subTotal) + 40, // 🌟 Inject combined absolute metrics here
+            totalWithDelivery: Number(subOrder.subTotal) + 40, 
             createdAt: fullyPopulatedOrder.createdAt
           });
         }
@@ -155,8 +164,8 @@ export const verifyPaymentAndPlaceOrder = async (req, res) => {
 
     return res.status(201).json({ success: true, message: "Order authorized and placed successfully via Razorpay!", orders: [fullyPopulatedOrder] });
   } catch (error) {
-    console.error("Payment registration fault block code execution stack trace:", error);
-    return res.status(500).json({ success: false, message: error.message || "Internal failure creating verified record tracking structural parameters." });
+    console.error("Payment registration fault block:", error);
+    return res.status(500).json({ success: false, message: error.message || "Internal failure creating verified record." });
   }
 };
 
@@ -220,7 +229,7 @@ export const placeOrder = async (req, res) => {
     const unifiedOrder = new Order({
       user: userId, 
       paymentMethod,
-      paymentStatus: "Pending", // For COD, payment status stays Pending until delivered
+      paymentStatus: "Pending", 
       deliveryAddress: { text: deliveryAddress.text, lat: Number(lat), lon: Number(lon) },
       shopOrders: shopOrdersPayload, 
       items: items.map(item => ({ product: item.product, quantity: item.quantity })), 
@@ -230,10 +239,10 @@ export const placeOrder = async (req, res) => {
     const savedOrder = await unifiedOrder.save();
     const fullyPopulatedOrder = await Order.findById(savedOrder._id)
       .populate("user", "fullName name email phone")
-      .populate({ path: 'shopOrders.shop', select: 'name image text' })
+      .populate({ path: 'shopOrders.shop', select: 'name image text address' })
       .populate({ path: 'shopOrders.shopOrderItems.item', select: 'name price image' });
 
-    // ⚡ WebSocket Notification to Store Owner (COD explicitly declared)
+    // ⚡ WebSocket Notification to Store Owner
     const io = req.app.get("io");
     if (io && fullyPopulatedOrder) {
       fullyPopulatedOrder.shopOrders.forEach(subOrder => {
@@ -244,13 +253,13 @@ export const placeOrder = async (req, res) => {
             subOrderId: subOrder._id,
             customer: fullyPopulatedOrder.user,
             deliveryAddress: fullyPopulatedOrder.deliveryAddress,
-            paymentMethod: "Cash on Delivery (COD)", // 🌟 Custom Clear Label For Owner Panel
-            paymentStatus: "Pending Collection",     // 🌟 Explicit context
+            paymentMethod: "Cash on Delivery", 
+            paymentStatus: "Pending",     
             status: subOrder.status || "Pending",
             shop: subOrder.shop,
             items: subOrder.shopOrderItems,
             subTotal: subOrder.subTotal,
-            totalWithDelivery: Number(subOrder.subTotal) + 40, // 🌟 Inject combined absolute metrics here
+            totalWithDelivery: Number(subOrder.subTotal) + 40, 
             createdAt: fullyPopulatedOrder.createdAt
           });
         }
@@ -303,36 +312,39 @@ export const getUserOrders = async (req, res) => {
   }
 };
 
-// ==========================================
-// 5. GET OWNER SHOP ORDERS
-// ==========================================
+// =========================================================
+// 5. GET OWNER SHOP ORDERS (ROBUST SYNCED TRANSLATION)
+// =========================================================
 export const getOwnerShopOrders = async (req, res) => {
   try {
     const ownerId = req.user?._id;
+    if (!ownerId) return res.status(401).json({ success: false, message: "Unauthorized." });
+
     const orders = await Order.find({ "shopOrders.owner": ownerId })
       .populate("user", "fullName name email phone")
-      .populate({ path: "shopOrders.shop", select: "name image" })
+      .populate({ path: "shopOrders.shop", select: "name image address" })
       .populate({ path: "shopOrders.shopOrderItems.item", select: "name image price" });
 
     const structuredOrders = [];
+
     orders.forEach((masterOrder) => {
       masterOrder.shopOrders.forEach((subOrder) => {
         if (subOrder.owner && subOrder.owner.toString() === ownerId.toString()) {
-          // Helper tags for the store dashboard view models
-          const isCOD = masterOrder.paymentMethod === "COD" || masterOrder.paymentMethod === "Cash on Delivery";
+          
+          const isCOD = checkIfCOD(masterOrder.paymentMethod);
           
           structuredOrders.push({
             masterOrderId: masterOrder._id,
             subOrderId: subOrder._id,
             customer: masterOrder.user,
             deliveryAddress: masterOrder.deliveryAddress,
-            paymentMethod: isCOD ? "Cash on Delivery" : "Online Payment (Paid)",
+            paymentMethod: isCOD ? "Cash on Delivery" : "Online Payment",
             paymentStatus: masterOrder.paymentStatus || (isCOD ? "Pending" : "Paid"),
             status: subOrder.status || "Pending",
             shop: subOrder.shop,
             items: subOrder.shopOrderItems,
             subTotal: subOrder.subTotal,
-            totalWithDelivery: Number(subOrder.subTotal) + 40, // 🌟 Add calculated absolute total field
+            totalWithDelivery: Number(subOrder.subTotal) + 40, 
             createdAt: masterOrder.createdAt
           });
         }
@@ -342,12 +354,13 @@ export const getOwnerShopOrders = async (req, res) => {
     structuredOrders.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
     return res.status(200).json({ success: true, orders: structuredOrders });
   } catch (error) {
+    console.error("Error in getOwnerShopOrders:", error);
     return res.status(500).json({ success: false, message: error.message });
   }
 };
 
 // ==========================================
-// 6. UPDATE SUB-ORDER STATUS & DRIVER DISPATCH
+// 6. UPDATE SUB-ORDER STATUS & DRIVER DISPATCH (ULTRA-COMPATIBLE OVERRIDE)
 // ==========================================
 export const updateSubOrderStatus = async (req, res) => {
   try {
@@ -380,7 +393,8 @@ export const updateSubOrderStatus = async (req, res) => {
         masterOrderId: updatedMasterOrder._id.toString(),
         subOrderId: subOrderId.toString(),
         newStatus: status,
-        deliveryBoy: null
+        deliveryBoy: null,
+        paymentMethod: updatedMasterOrder.paymentMethod || "Online" 
       });
     }
 
@@ -399,11 +413,8 @@ export const updateSubOrderStatus = async (req, res) => {
         });
         await newAssignment.save();
 
-        // Calculate the absolute total including the delivery fee (40)
         const totalWithDelivery = Number(subOrder.subTotal) + 40;
-
-        // Compute direct instructions using the final price
-        const isCOD = updatedMasterOrder.paymentMethod === "COD" || updatedMasterOrder.paymentMethod === "Cash on Delivery";
+        const isCOD = checkIfCOD(updatedMasterOrder.paymentMethod);
         const collectionInstruction = isCOD 
           ? `COLLECT CASH AT DOORSTEP: ₹${totalWithDelivery}` 
           : "PREPAID ORDER - DO NOT COLLECT CASH";
@@ -417,8 +428,9 @@ export const updateSubOrderStatus = async (req, res) => {
               shopName: activeShop?.name || "Local Kitchen",
               shopAddress: activeShop?.text || activeShop?.address || "Store Address",
               deliveryAddress: updatedMasterOrder.deliveryAddress,
-              subTotal: totalWithDelivery, // Sends total amount directly to driver console
-              paymentMethod: isCOD ? "COD" : "Online (Prepaid)", 
+              subTotal: subOrder.subTotal,
+              // 🌟 SHOTGUN APPROACH: We pass ALL variations so frontend verification CANNOT fail
+              paymentMethod: isCOD ? "COD Cash on Delivery" : "Online Prepaid Payment", 
               collectionInstruction: collectionInstruction      
             });
           });
@@ -431,14 +443,15 @@ export const updateSubOrderStatus = async (req, res) => {
     return res.status(500).json({ success: false, message: error.message });
   }
 };
+
 // ==========================================
-// 7. GET AVAILABLE JOBS FOR DELIVERY BOYS (REST ENDPOINT ARR)
+// 7. GET AVAILABLE JOBS FOR DELIVERY BOYS (ULTRA-COMPATIBLE OVERRIDE)
 // ==========================================
 export const getAvailableJobs = async (req, res) => {
   try {
     const activeOrders = await Order.find({ "shopOrders.status": "Out for Delivery" })
       .populate("user", "fullName name email phone")
-      .populate({ path: "shopOrders.shop", select: "name image text address city" })
+      .populate({ path: "shopOrders.status" === "Out for Delivery" ? "shopOrders.shop" : "shopOrders.shop", select: "name image text address city" })
       .populate({ path: "shopOrders.shopOrderItems.item", select: "name price image" })
       .lean();
 
@@ -447,17 +460,20 @@ export const getAvailableJobs = async (req, res) => {
     activeOrders.forEach((masterOrder) => {
       masterOrder.shopOrders.forEach((subOrder) => {
         if (subOrder.status === "Out for Delivery" && !subOrder.deliveryBoy) {
-          const isCOD = masterOrder.paymentMethod === "COD" || masterOrder.paymentMethod === "Cash on Delivery";
+          
+          const isCOD = checkIfCOD(masterOrder.paymentMethod);
+          const totalWithDelivery = Number(subOrder.subTotal) + 40;
           
           broadcastedJobs.push({
             masterOrderId: masterOrder._id,
             subOrderId: subOrder._id,
             customer: masterOrder.user,
             deliveryAddress: masterOrder.deliveryAddress,
-            paymentMethod: isCOD ? "COD" : "Online (Prepaid)", // 🌟 clean tag injection
+            // 🌟 SHOTGUN APPROACH: Matches both .includes('cod') and .includes('cash') perfectly
+            paymentMethod: isCOD ? "COD Cash on Delivery" : "Online Prepaid Payment", 
             collectionInstruction: isCOD 
-              ? `COLLECT CASH AT DOORSTEP: ₹${subOrder.subTotal}` 
-              : "PREPAID ORDER - DO NOT COLLECT CASH",         // 🌟 explicit directive payload
+              ? `COLLECT CASH AT DOORSTEP: ₹${totalWithDelivery}` 
+              : "PREPAID ORDER - DO NOT COLLECT CASH",         
             status: subOrder.status,
             shop: subOrder.shop,
             items: subOrder.shopOrderItems,
@@ -474,13 +490,14 @@ export const getAvailableJobs = async (req, res) => {
     return res.status(500).json({ success: false, message: error.message });
   }
 };
-
+// ==========================================
+// 8. RATE ITEM
+// ==========================================
 export const rateItem = async (req, res) => {
   try {
     const { itemId, subOrderId, rating } = req.body;
-    const userId = req.user._id; // Extracted from your auth middleware
+    const userId = req.user._id; 
 
-    // 1. Basic Validation
     if (!itemId || !subOrderId || !rating) {
       return res.status(400).json({ 
         success: false, 
@@ -495,7 +512,6 @@ export const rateItem = async (req, res) => {
       });
     }
 
-    // 2. Check if the user has already rated this specific item for this order
     const existingReview = await Review.findOne({ userId, subOrderId, itemId });
     if (existingReview) {
       return res.status(400).json({
@@ -504,7 +520,6 @@ export const rateItem = async (req, res) => {
       });
     }
 
-    // 3. Create and commit the review ledger record
     const newReview = new Review({
       userId,
       itemId,
@@ -513,8 +528,6 @@ export const rateItem = async (req, res) => {
     });
     await newReview.save();
 
-    // 4. (Optional) Mark item as rated inside the master order database record
-    // This allows the frontend to remember it's rated even if the user clears local component states.
     await Order.updateOne(
       { "shopOrders._id": subOrderId, "shopOrders.shopOrderItems.item": itemId },
       { 
@@ -544,13 +557,13 @@ export const rateItem = async (req, res) => {
   }
 };
 
-// Append directly inside your backend/controllers/order.controller.js file
-
+// ==========================================
+// 9. RIDER DELIVERY HISTORY
+// ==========================================
 export const getRiderDeliveryHistory = async (req, res) => {
   try {
-    const riderId = req.user._id; // Extracted safely from your isAuth middleware context
+    const riderId = req.user._id; 
 
-    // Find orders where this delivery boy was assigned and status is completed/delivered
     const orders = await Order.find({
       "shopOrders.deliveryBoy": riderId,
       "shopOrders.status": { $in: ["Completed", "Delivered"] }
@@ -559,17 +572,13 @@ export const getRiderDeliveryHistory = async (req, res) => {
     .populate("shopOrders.shop", "name image")
     .populate("shopOrders.shopOrderItems.item", "name image");
 
-    // Flatten and filter only sub-orders matching this rider
     let historyList = [];
 
     orders.forEach(masterOrder => {
       masterOrder.shopOrders.forEach(subOrder => {
         if (subOrder.deliveryBoy && subOrder.deliveryBoy.toString() === riderId.toString() && ["Completed", "Delivered"].includes(subOrder.status)) {
           
-          // Calculate sum of quantities for this sub-order
           const totalItemsCount = subOrder.shopOrderItems.reduce((sum, item) => sum + item.quantity, 0);
-
-          // Approximate payment calculation or use standard sub-order total fields if present
           const calculatedSubTotal = subOrder.shopOrderItems.reduce((sum, item) => sum + (item.price * item.quantity), 0);
 
           historyList.push({
@@ -584,9 +593,9 @@ export const getRiderDeliveryHistory = async (req, res) => {
             })),
             itemCount: totalItemsCount,
             amount: calculatedSubTotal,
-            paymentMethod: masterOrder.paymentMethod || "COD",
+            paymentMethod: masterOrder.paymentMethod,
             deliveryAddress: masterOrder.deliveryAddress?.text || "Customer Address",
-            completedAt: subOrder.updatedAt || masterOrder.updatedAt // tracks terminal execution time
+            completedAt: subOrder.updatedAt || masterOrder.updatedAt 
           });
         }
       });
@@ -605,5 +614,44 @@ export const getRiderDeliveryHistory = async (req, res) => {
       message: "Internal configuration server error building rider analytics.",
       error: error.message
     });
+  }
+};
+
+// ==========================================
+// 10. AUTHENTICATED USER CONFIGS
+// ==========================================
+export const getCurrentUser = async (req, res) => {
+  try {
+    const userId = req.user?.id; 
+    if (!userId) return res.status(401).json({ message: "No ID" });
+
+    const user = await User.findById(userId).select("-password");
+    if (!user) return res.status(404).json({ message: "User not found" });
+
+    return res.status(200).json({ user }); 
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+}
+
+export const updateUserLocation = async (req, res) => {
+  try {
+    const { lat, lon } = req.body;
+    const userId = req.user?.id; 
+
+    const user = await User.findByIdAndUpdate(userId, {
+        location: {
+            type: 'Point',
+            coordinates: [lon, lat]
+        }
+    }, { returnDocument: 'after' }); 
+
+    if (!user) {
+        return res.status(400).json({ message: "user is not found" });
+    }
+
+    return res.status(200).json({ message: 'location updated' });
+  } catch (error) {
+    return res.status(500).json({ message: `update location error: ${error.message}` });
   }
 };

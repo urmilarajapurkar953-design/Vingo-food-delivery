@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useSocket } from '../context/SocketContext';
-import { FaMapMarkerAlt, FaStore, FaMoneyBillWave, FaClock, FaShippingFast, FaMap, FaLock, FaUndo, FaTimes, FaCreditCard, FaWallet } from 'react-icons/fa';
+import { FaMapMarkerAlt, FaStore, FaMoneyBillWave, FaClock, FaShippingFast, FaMap, FaLock, FaUndo, FaTimes, FaCreditCard, FaWallet, FaCoins } from 'react-icons/fa';
 import { useSelector } from 'react-redux'; 
 import axios from 'axios'; 
 import { serverUrl } from '../App';
@@ -29,6 +29,30 @@ const DeliveryBoy = () => {
   const { userData, loading } = useSelector((state) => state.user || {});
   const driverId = userData?._id;
 
+  // FIXED ARRANGEMENT VALUE CONFIGURATION FOR EARNINGS
+  const DELIVERY_FEE_PAYOUT = 80;
+
+  // 🌟 DYNAMIC ORDER VALUE + APP PLATFORM FEES CALCULATION UTILITY
+  const calculateTotalOrderValue = (orderObj) => {
+    if (!orderObj) return 0;
+    
+    // Fallback extraction tree for basic amount
+    const baseValue = orderObj.totalAmount || orderObj.subTotal || orderObj.orderValue || orderObj.total || orderObj.amount || 0;
+    
+    // If order price is less than 500, apply the 40 rupees app fee
+    if (baseValue > 0 && baseValue < 500) {
+      return baseValue + 40;
+    }
+    return baseValue;
+  };
+
+  // 🌟 ROBUST CASE-INSENSITIVE PAYMENT METHOD CHECKER
+  const checkIfCOD = (paymentMethodString) => {
+    if (!paymentMethodString) return false;
+    const normalized = paymentMethodString.toLowerCase();
+    return normalized.includes('cod') || normalized.includes('cash');
+  };
+
   // 🌟 PERSISTENCE STEP 2: Sync activeDelivery to localStorage whenever it changes
   useEffect(() => {
     if (activeDelivery) {
@@ -48,16 +72,14 @@ const DeliveryBoy = () => {
         if (response.data.success) {
           setAvailableJobs(response.data.jobs || []);
           
-          // If your backend endpoint returns the currently assigned active job in the payload, 
-          // we use it to securely hydrate the active panel even if localStorage was cleared.
           if (response.data.activeJob) {
             const activeJobData = response.data.activeJob;
             setActiveDelivery({
               ...activeJobData,
-              // Safely pull total down if it's nested inside a master order object
               subTotal: activeJobData.subTotal || activeJobData.orderValue || activeJobData.masterOrderId?.subTotal || activeJobData.orderId?.subTotal,
               savedShopName: activeJobData.shopName || activeJobData.shop?.name || activeJobData.items?.[0]?.shopId?.name,
-              savedShopAddress: activeJobData.shopAddress || activeJobData.shop?.address || activeJobData.items?.[0]?.shopId?.address || activeJobData.storeAddress
+              savedShopAddress: activeJobData.shopAddress || activeJobData.shop?.address || activeJobData.items?.[0]?.shopId?.address || activeJobData.storeAddress,
+              paymentMethod: activeJobData.paymentMethod || activeJobData.orderId?.paymentMethod || activeJobData.masterOrderId?.paymentMethod
             });
           }
         }
@@ -125,6 +147,11 @@ const DeliveryBoy = () => {
   }, [activeDelivery, socket]);
 
   const handleAcceptJob = async (jobObject) => {
+    if (activeDelivery) {
+      toast.error("You cannot accept another job until your current delivery is successful!");
+      return;
+    }
+
     if (!jobObject) {
       toast.error("Unable to read job data context payload.");
       return;
@@ -151,13 +178,11 @@ const DeliveryBoy = () => {
         toast.success("Job accepted! Drive safely.");
         
         const acceptedJob = {
-          // 1. Start with your backend assignment properties
           ...(response.data.assignment || {}),
-          // 2. Spread the original job object second so missing keys fall back to it
           ...jobObject, 
-          // 3. Keep your custom shop mappings
           savedShopName: jobObject.shopName || jobObject.shop?.name || jobObject.items?.[0]?.shopId?.name,
-          savedShopAddress: jobObject.shopAddress || jobObject.shop?.address || jobObject.items?.[0]?.shopId?.address || jobObject.storeAddress
+          savedShopAddress: jobObject.shopAddress || jobObject.shop?.address || jobObject.items?.[0]?.shopId?.address || jobObject.storeAddress,
+          paymentMethod: jobObject.paymentMethod
         };
         setActiveDelivery(acceptedJob);
         setAvailableJobs((prevJobs) => 
@@ -220,7 +245,7 @@ const DeliveryBoy = () => {
         toast.success("Doorstep OTP verified! Order completed successfully.");
         setShowOtpModal(false);
         setOtpInput('');
-        setActiveDelivery(null); // This automatically fires the useEffect hook to wipe localStorage clean
+        setActiveDelivery(null); 
       }
     } catch (error) {
       console.error("Validation submission crash:", error);
@@ -241,7 +266,6 @@ const DeliveryBoy = () => {
 
     let googleMapsUrl = "";
 
-    // Optimized production-ready universal Google Maps direction parameters
     if (destLat && destLng) {
       googleMapsUrl = `https://www.google.com/maps/dir/?api=1&origin=${originShop}&destination=${destLat},${destLng}&travelmode=driving`;
     } else if (destText) {
@@ -283,13 +307,25 @@ const DeliveryBoy = () => {
             </div>
           ) : (
             <div className="flex flex-col gap-4">
-              <h2 className="text-sm font-bold text-orange-600 tracking-wider uppercase">Offers In Your Radius ({availableJobs.length})</h2>
+              <div className="flex items-center justify-between">
+                <h2 className="text-sm font-bold text-orange-600 tracking-wider uppercase">Offers In Your Radius ({availableJobs.length})</h2>
+                {activeDelivery && (
+                  <span className="text-xs text-red-500 font-extrabold bg-red-50 px-2.5 py-1 rounded-lg border border-red-100 animate-pulse">
+                    Feed Locked: Run Active
+                  </span>
+                )}
+              </div>
               {availableJobs.map((job, index) => {
                 const uniqueKeyId = job.subOrderId || job.assignmentId || job._id || `offer-card-${index}`;
-                const isJobCOD = job.paymentMethod === "COD" || job.paymentMethod === "Cash on Delivery";
                 
+                // 🌟 FIX: Implemented Case-Insensitive Payment Matching Check
+                const isJobCOD = checkIfCOD(job.paymentMethod);
+                
+                // 🌟 FIX: Compute base order values with automated platform fee logic appended
+                const totalFoodValueWithFees = calculateTotalOrderValue(job);
+
                 return (
-                  <div key={uniqueKeyId} className="bg-white rounded-2xl border border-gray-100 p-6 shadow-sm hover:shadow-md transition-all flex flex-col justify-between gap-4 md:flex-row md:items-center">
+                  <div key={uniqueKeyId} className={`bg-white rounded-2xl border p-6 shadow-sm transition-all flex flex-col justify-between gap-4 md:flex-row md:items-center ${activeDelivery ? 'border-gray-100 opacity-65' : 'border-gray-100 hover:shadow-md'}`}>
                     <div className="flex-1 flex flex-col gap-3">
                       <div className="flex items-start gap-3">
                         <div className="p-2 rounded-lg bg-orange-50 text-[#ff4d2d] mt-0.5">
@@ -319,28 +355,43 @@ const DeliveryBoy = () => {
                       </div>
                     </div>
 
-                    <div className="border-t md:border-t-0 md:border-l border-gray-100 pt-4 md:pt-0 md:pl-6 flex flex-row md:flex-col items-center justify-between md:justify-center gap-4 min-w-[160px]">
-                      <div className="text-left md:text-center w-full">
-                        <span className="text-[10px] text-gray-400 uppercase font-bold tracking-wider block md:text-center">Order Value</span>
-                        <div className="text-xl font-black text-gray-800 flex items-center justify-start md:justify-center gap-1">
-                          <FaMoneyBillWave className="text-emerald-500 text-lg" /> ₹{job.subTotal || job.orderValue || 0}
+                    <div className="border-t md:border-t-0 md:border-l border-gray-100 pt-4 md:pt-0 md:pl-6 flex flex-row md:flex-col items-center justify-between md:justify-center gap-4 min-w-[190px]">
+                      <div className="text-left md:text-center w-full space-y-1">
+                        
+                        <span className="text-[10px] text-emerald-600 uppercase font-black tracking-wider block md:text-center">Your Earning</span>
+                        <div className="text-2xl font-black text-emerald-600 flex items-center justify-start md:justify-center gap-1 bg-emerald-50 px-3 py-1 rounded-xl w-fit mx-auto border border-emerald-100">
+                          <FaCoins className="text-emerald-500 text-lg" /> ₹{DELIVERY_FEE_PAYOUT}
                         </div>
+
+                        {/* 🌟 APPLIED PLATFORM SURCHARGE CALCULATION REFLECTION */}
+                        <div className="text-[11px] text-gray-400 mt-1 block md:text-center">
+                          Total Amount: <span className="font-bold text-gray-600">₹{totalFoodValueWithFees}</span>
+                        </div>
+
                         <div className={`mt-1.5 flex items-center justify-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-black uppercase tracking-wider border mx-auto w-fit ${
                           isJobCOD 
                             ? "bg-amber-50 text-amber-700 border-amber-200" 
-                            : "bg-emerald-50 text-emerald-700 border-emerald-200"
+                            : "bg-blue-50 text-blue-700 border-blue-200"
                         }`}>
                           {isJobCOD ? <FaWallet size={10} /> : <FaCreditCard size={10} />}
-                          {isJobCOD ? "COD" : "Prepaid"}
+                          {isJobCOD ? " COD " : "Prepaid System"}
                         </div>
                       </div>
 
                       <button
-                        disabled={loadingId !== null}
+                        disabled={loadingId !== null || activeDelivery !== null}
                         onClick={() => handleAcceptJob(job)}
-                        className="w-full max-w-[150px] bg-[#ff4d2d] text-white font-bold py-3 px-4 rounded-xl shadow-lg hover:bg-[#e03d1e] disabled:bg-gray-300 transition-all text-sm tracking-wide cursor-pointer"
+                        className={`w-full max-w-[150px] font-bold py-3 px-4 rounded-xl transition-all text-sm tracking-wide ${
+                          activeDelivery 
+                            ? "bg-gray-100 text-gray-400 border border-gray-200 cursor-not-allowed shadow-none" 
+                            : "bg-[#ff4d2d] text-white shadow-lg hover:bg-[#e03d1e] disabled:bg-gray-300 cursor-pointer"
+                        }`}
                       >
-                        {loadingId === (job.subOrderId || job.assignmentId || job._id) ? 'Claiming...' : 'Accept Job'}
+                        {loadingId === (job.subOrderId || job.assignmentId || job._id) 
+                          ? 'Claiming...' 
+                          : activeDelivery 
+                          ? 'Locked' 
+                          : 'Accept Job'}
                       </button>
                     </div>
                   </div>
@@ -371,32 +422,51 @@ const DeliveryBoy = () => {
                   </div>
                 </div>
 
-                <div className={`p-4 rounded-xl border flex items-center justify-between shadow-sm ${
-                  activeDelivery.paymentMethod === "COD" || activeDelivery.paymentMethod === "Cash on Delivery"
-                    ? "bg-amber-50 border-amber-200 text-amber-900"
-                    : "bg-emerald-50 border-emerald-200 text-emerald-900"
-                }`}>
-                  <div>
-                    <span className="text-[10px] uppercase font-black opacity-60 tracking-wider block">Financial Accounting Action</span>
-                    <span className="text-xs font-black flex items-center gap-1.5 mt-0.5">
-                      {activeDelivery.paymentMethod === "COD" || activeDelivery.paymentMethod === "Cash on Delivery" ? (
-                        <><FaWallet className="text-amber-600" /> COLLECT CASH AT DOORSTEP</>
-                      ) : (
-                        <><FaCreditCard className="text-emerald-600" /> PAID SECURELY ONLINE</>
-                      )}
+                {/* RESTRUCTURED FINANCIAL ACCOUNTING BLOCK */}
+                <div className="bg-gray-50 border border-gray-200 rounded-2xl p-4 space-y-3 shadow-inner">
+                  
+                  {/* Payout Metric Row */}
+                  <div className="flex justify-between items-center bg-emerald-50 border border-emerald-100 p-2.5 rounded-xl">
+                    <span className="text-xs font-bold text-emerald-800 flex items-center gap-1">
+                      <FaCoins className="text-emerald-600" /> Your Clear Payout:
                     </span>
+                    <span className="text-lg font-black text-emerald-700">₹{DELIVERY_FEE_PAYOUT}</span>
                   </div>
-                  <div className="text-right">
-                    <span className="text-xs font-mono font-black block bg-white/80 px-2 py-1 rounded-lg border border-black/5">
-                      ₹{activeDelivery.subTotal || 
-                        activeDelivery.orderValue || 
-                        activeDelivery.total || 
-                        activeDelivery.grandTotal || 
-                        activeDelivery.totalPaid || 
-                        activeDelivery.price || 
-                        0}
-                    </span>
-                  </div>
+
+                  <div className="border-t border-dashed border-gray-200 my-1"></div>
+
+                  {/* 🌟 FIX: Applied case-insensitive checker and dynamic total logic to active container card layout */}
+                  {(() => {
+                    const isActiveCOD = checkIfCOD(activeDelivery.paymentMethod);
+                    const activeTotalWithFees = calculateTotalOrderValue(activeDelivery);
+
+                    return (
+                      <div className={`p-3 rounded-xl border flex flex-col gap-1 ${
+                        isActiveCOD
+                          ? "bg-amber-50 border-amber-200 text-amber-900"
+                          : "bg-blue-50 border-blue-200 text-blue-900"
+                      }`}>
+                        <div className="flex justify-between items-center">
+                          <span className="text-[10px] uppercase font-black opacity-70 tracking-wider flex items-center gap-1">
+                            {isActiveCOD ? (
+                              <><FaWallet className="text-amber-600" /> COLLECT DOORSTEP CASH:</>
+                            ) : (
+                              <><FaCreditCard className="text-blue-600" /> DIGITAL PREPAID ORDER:</>
+                            )}
+                          </span>
+                          <span className="text-sm font-black font-mono">
+                            ₹{activeTotalWithFees}
+                          </span>
+                        </div>
+
+                        <p className="text-[10px] font-medium opacity-75 leading-tight mt-1">
+                          {isActiveCOD
+                            ? "*Collect this full amount from customer before unlocking the drop-off OTP code."
+                            : "*Customer paid online already. No cash collection required."}
+                        </p>
+                      </div>
+                    );
+                  })()}
                 </div>
 
                 <div className="flex flex-col gap-4">
@@ -430,7 +500,7 @@ const DeliveryBoy = () => {
                 <div className="flex flex-col gap-3 pt-2">
                   <button 
                     onClick={handleOpenGoogleMapsNavigation} 
-                    className="w-full bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold py-2.5 rounded-lg transition-all flex items-center justify-center gap-2 cursor-pointer shadow-md"
+                    className="w-full bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold py-2.5 rounded-lg transition-all flex items-center justify-center gap-2 cursor-pointer shadow-md border-none"
                   >
                     <FaMap size={12} />
                     Open Route in Google Maps
@@ -439,7 +509,7 @@ const DeliveryBoy = () => {
                   <button 
                     disabled={completing}
                     onClick={() => handleInitializeDropoff(false)} 
-                    className="w-full bg-emerald-500 text-white text-xs font-bold py-2.5 rounded-lg hover:bg-emerald-600 disabled:bg-gray-300 transition-all shadow-md flex items-center justify-center cursor-pointer"
+                    className="w-full bg-emerald-500 text-white text-xs font-bold py-2.5 rounded-lg hover:bg-emerald-600 disabled:bg-gray-300 transition-all shadow-md flex items-center justify-center cursor-pointer border-none"
                   >
                     {completing ? 'Sending OTP...' : 'Confirm Drop-off / Complete Run'}
                   </button>
@@ -460,7 +530,7 @@ const DeliveryBoy = () => {
             
             <button 
               onClick={() => { setShowOtpModal(false); setOtpInput(''); }}
-              className="absolute top-5 right-5 text-gray-400 hover:text-gray-600 transition-colors"
+              className="absolute top-5 right-5 text-gray-400 hover:text-gray-600 transition-colors bg-transparent border-none cursor-pointer"
             >
               <FaTimes size={16} />
             </button>
@@ -488,7 +558,7 @@ const DeliveryBoy = () => {
               <button
                 type="submit"
                 disabled={completing || otpInput.length !== 6}
-                className="w-full bg-[#ff4d2d] hover:bg-[#e64429] text-white py-3.5 rounded-xl font-bold transition-all disabled:bg-gray-200 disabled:text-gray-400 shadow-md text-sm cursor-pointer"
+                className="w-full bg-[#ff4d2d] hover:bg-[#e64429] text-white py-3.5 rounded-xl font-bold transition-all disabled:bg-gray-300 disabled:text-gray-400 shadow-md text-sm cursor-pointer border-none"
               >
                 {completing ? "Verifying Token..." : "Unlock & Release Order"}
               </button>
@@ -499,21 +569,21 @@ const DeliveryBoy = () => {
                 type="button"
                 disabled={resending}
                 onClick={() => handleInitializeDropoff(true)}
-                className="text-gray-500 hover:text-gray-800 font-bold flex items-center gap-1.5 transition-colors disabled:text-gray-300"
+                className="text-gray-500 hover:text-gray-800 font-bold flex items-center gap-1.5 transition-colors disabled:text-gray-300 bg-transparent border-none cursor-pointer"
               >
                 <FaUndo className={resending ? "animate-spin" : ""} /> {resending ? "Sending..." : "Resend PIN"}
               </button>
               <button 
                 type="button"
                 onClick={() => { setShowOtpModal(false); setOtpInput(''); }}
-                className="text-red-400 hover:text-red-600 font-medium transition-colors"
+                className="text-red-400 hover:text-red-600 font-medium transition-colors bg-transparent border-none cursor-pointer"
               >
                 Cancel 
               </button>
             </div>
           </div>
         </div>
-      )}
+      )}f
     </div>
   );
 };

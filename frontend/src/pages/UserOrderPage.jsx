@@ -7,24 +7,19 @@ import {
 } from 'react-icons/fa';
 
 import OrderTrackingMap from '../components/OrderTrackingMap';
-// Pull Shared Named Hook from Hooks Folder
 import { useSocket } from '../hooks/useSocket';
 
-// 🌟 New Inline Sub-Component for handling Item Ratings interactively
+// Inline Sub-Component for handling Item Ratings interactively
 const ItemRatingWidget = ({ itemId, subOrderId }) => {
   const [rating, setRating] = useState(0);
   const [hover, setHover] = useState(0);
   const [isSubmitted, setIsSubmitted] = useState(false);
   const [submitting, setSubmitting] = useState(false);
 
-  // Fetch existing rating on load if your database schema already supports it
-  // Otherwise, it defaults to 0 stars ready for user interaction.
-
   const handleRatingSubmit = async (selectedRating) => {
     setRating(selectedRating);
     setSubmitting(true);
     try {
-      // Replace with your exact back-end rating endpoint
       const res = await axios.post(
         'http://localhost:8000/api/orders/rate-item', 
         { itemId, subOrderId, rating: selectedRating },
@@ -78,56 +73,78 @@ const ItemRatingWidget = ({ itemId, subOrderId }) => {
 const UserOrderPage = ({ currentUser }) => {
   const [orders, setOrders] = useState([]);
   const [loading, setLoading] = useState(true);
-  
-  // Track which master order card has its route map currently visible (Stored as a safe string)
   const [activeMapOrderId, setActiveMapOrderId] = useState(null);
-  
-  // Initialize Router context for redirection routing hooks
   const navigate = useNavigate();
-  
-  // Inject background pipeline hook instance
   const { socket } = useSocket();
 
-  useEffect(() => {
-    fetchUserOrders();
+  // Helper for robust case-insensitive checking
+  const checkIfCOD = (methodString) => {
+    if (!methodString) return false;
+    const normalized = String(methodString).toLowerCase();
+    return normalized.includes('cod') || normalized.includes('cash');
+  };
 
-    if (!socket) return;
-
-    socket.on('orderStatusUpdated', (data) => {
-      console.log("⚡ Real-time stage status catch on user client:", data);
-      setOrders((prevOrders) =>
-        prevOrders.map((order) => {
-          const hasSubOrder = order.shopOrders?.some(sub => sub._id.toString() === data.subOrderId.toString());
-          
-          if (order._id.toString() === data.masterOrderId.toString() || hasSubOrder) {
-            const updatedShopOrders = order.shopOrders.map((shopOrder) => {
-              if (shopOrder._id.toString() === data.subOrderId.toString()) {
-                return { ...shopOrder, status: data.newStatus };
-              }
-              return shopOrder;
-            });
-            return { ...order, shopOrders: updatedShopOrders };
-          }
-          return order;
-        })
-      );
-    });
-
-    return () => {
-      socket.off('orderStatusUpdated');
-    };
-  }, [socket]);
-
-  const fetchUserOrders = async () => {
+  const fetchUserOrders = async (showLoadingState = false) => {
+    if (showLoadingState) setLoading(true);
     try {
       const res = await axios.get('http://localhost:8000/api/orders/user-history', { withCredentials: true });
       if (res.data.success) setOrders(res.data.orders);
     } catch (err) {
       console.error("Error loading history records:", err);
     } finally {
-      setLoading(false);
+      if (showLoadingState) setLoading(false);
     }
   };
+
+  useEffect(() => {
+    fetchUserOrders(true);
+
+    if (!socket) return;
+
+    socket.on('orderStatusUpdated', async (data) => {
+      console.log("⚡ Real-time stage status catch on user client:", data);
+      
+      // 1. Instantly update the visual status on screen so the user sees progress immediately
+      setOrders((prevOrders) =>
+        prevOrders.map((order) => {
+          const orderIdStr = order._id?.toString();
+          const masterIdStr = data.masterOrderId?.toString();
+          const targetSubOrderIdStr = data.subOrderId?.toString();
+
+          const hasSubOrder = order.shopOrders?.some(
+            (sub) => sub._id?.toString() === targetSubOrderIdStr
+          );
+          
+          if (orderIdStr === masterIdStr || hasSubOrder) {
+            const updatedShopOrders = order.shopOrders.map((shopOrder) => {
+              if (shopOrder._id?.toString() === targetSubOrderIdStr) {
+                return { ...shopOrder, status: data.newStatus };
+              }
+              return shopOrder;
+            });
+
+            return { 
+              ...order, 
+              shopOrders: updatedShopOrders,
+              paymentMethod: data.paymentMethod || order.paymentMethod 
+            };
+          }
+          return order;
+          })
+        );
+
+      // 🌟 FIX: Silently fetch the latest orders from the database after a 1-second delay
+      // This gives your backend database enough time to finish saving the "Online/Prepaid" payment status 
+      // and updates the UI automatically without forcing a manual page refresh.
+      setTimeout(() => {
+        fetchUserOrders(false);
+      }, 1000);
+    });
+
+    return () => {
+      socket.off('orderStatusUpdated');
+    };
+  }, [socket]);
 
   const getStatusBadge = (status) => {
     const styles = {
@@ -189,7 +206,7 @@ const UserOrderPage = ({ currentUser }) => {
                 <div className="flex-1 h-1 mx-2 rounded-full bg-gray-100 overflow-hidden relative -mt-3">
                   <div 
                     className="absolute top-0 left-0 bottom-0 bg-orange-500 transition-all duration-700"
-                    style={{ width: isDone && idx < currentIdx ? '100%' : '0%' }}
+                    style={{ width: !isFullyDelivered && isDone && idx < currentIdx ? '100%' : '0%' }}
                   />
                 </div>
               )}
@@ -217,8 +234,9 @@ const UserOrderPage = ({ currentUser }) => {
           {orders.map((masterOrder) => {
             const currentOrderIdStr = String(masterOrder._id);
             const isMapActive = activeMapOrderId === currentOrderIdStr;
-
-            const isCOD = masterOrder.paymentMethod === 'COD' || masterOrder.paymentMethod === 'Cash on Delivery';
+            
+            // Checking actual data structure dynamically
+            const isCOD = checkIfCOD(masterOrder.paymentMethod);
 
             const trackableSubOrder = masterOrder.shopOrders?.find(sub => 
               ['Driver Assigned', 'Out for Delivery', 'On Way'].includes(sub.status)
@@ -242,7 +260,6 @@ const UserOrderPage = ({ currentUser }) => {
 
                 <div className="p-5 space-y-8">
                   {masterOrder.shopOrders.map((shopOrder) => {
-                    // 🌟 Determine if this specific sub order container has finished delivery
                     const isSubOrderDelivered = ['Completed', 'Delivered'].includes(shopOrder.status);
 
                     return (
@@ -277,7 +294,6 @@ const UserOrderPage = ({ currentUser }) => {
                                   <p className="text-xs font-bold text-gray-800">{itemObj.item?.name || 'Menu Item'}</p>
                                   <p className="text-[11px] text-gray-400">Qty: <span className="text-gray-700 font-bold">{itemObj.quantity}</span> × ₹{itemObj.price}</p>
                                   
-                                  {/* 🌟 Conditional Star Assessment Injection Block */}
                                   {isSubOrderDelivered && (
                                     <ItemRatingWidget 
                                       itemId={itemObj.item?._id || itemObj.item} 
@@ -295,7 +311,6 @@ const UserOrderPage = ({ currentUser }) => {
                   })}
                 </div>
 
-                {/* Bottom Address and Actions Bar */}
                 <div className="bg-gradient-to-r from-orange-50/20 to-transparent px-5 py-4 border-t border-gray-100 flex flex-col gap-4">
                   <div className="flex flex-wrap justify-between items-center gap-3">
                     <div className="text-xs text-gray-500 flex items-center gap-1.5 max-w-sm truncate">
@@ -304,7 +319,6 @@ const UserOrderPage = ({ currentUser }) => {
                     </div>
                     
                     <div className="flex items-center gap-4 flex-wrap sm:flex-nowrap">
-                      
                       {!isEverythingDelivered && (
                         <>
                           {trackableSubOrder ? (

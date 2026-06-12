@@ -79,12 +79,13 @@ const OwnerOrderPage = ({ currentOwnerId }) => {
 
         // ⚡ REAL-TIME DISPATCH: If status is updated to Out for Delivery, alert the driver network!
         if (targetStatus === 'Out for Delivery' && socket) {
-          // Look up corresponding order information metrics from state
           const contextualOrder = shopOrders.find(item => item.subOrderId === subOrderId);
           if (contextualOrder) {
-            socket.emit('joinRoom', masterOrderId.toString()); // Ensure joined to master room
+            socket.emit('joinRoom', masterOrderId.toString()); 
             
-            // Format dynamic dispatch packet mapping your delivery boy's criteria
+            // 🌟 FIXED: Use fallback checking for the socket payload here as well
+            const dynamicPaymentMethod = contextualOrder.paymentMethod || contextualOrder.paymentMode || "COD";
+
             const dispatchJobPayload = {
               _id: subOrderId, 
               subOrderId: subOrderId,
@@ -93,11 +94,10 @@ const OwnerOrderPage = ({ currentOwnerId }) => {
               shopAddress: contextualOrder.shopAddress || contextualOrder.shop?.address || "Store Address",
               deliveryAddress: contextualOrder.deliveryAddress,
               subTotal: contextualOrder.subTotal || contextualOrder.orderValue || 0,
-              paymentMethod: contextualOrder.paymentMethod || "COD",
+              paymentMethod: dynamicPaymentMethod,
               createdAt: new Date().toISOString()
             };
 
-            // Send notification globally to all connected delivery boys
             socket.emit('shareRiderLocationUpdate', {
               assignmentId: "delivery_drivers_room",
               isGlobalBroadcastJob: true, 
@@ -236,11 +236,12 @@ const OwnerOrderPage = ({ currentOwnerId }) => {
                 <div className="bg-neutral-50 rounded-2xl p-4 flex flex-wrap justify-between items-center gap-4 border border-neutral-100">
                   <div className="flex gap-4 items-center">
                     <div className="text-xs text-neutral-500">
-                      Payment Method: <strong className="text-neutral-700 block uppercase text-[10px] tracking-wider">{order.paymentMethod || "COD"}</strong>
+                      {/* 🌟 FIXED: Evaluates paymentMethod first, falls back to paymentMode, defaults to COD */}
+                      Payment Method: <strong className="text-neutral-700 block uppercase text-[10px] tracking-wider">{order.paymentMethod || order.paymentMode || "COD"}</strong>
                     </div>
-<div className="text-xs text-neutral-500 border-l pl-4 border-neutral-200">
-  Total Amount: <strong className="text-base font-black text-neutral-800 block">₹{Number(order.subTotal) + 40}</strong>
-</div>
+                    <div className="text-xs text-neutral-500 border-l pl-4 border-neutral-200">
+                      Total Amount: <strong className="text-base font-black text-neutral-800 block">₹{Number(order.subTotal) + 40}</strong>
+                    </div>
                     
                     <div className="text-xs text-neutral-500 border-l pl-4 border-neutral-200 flex items-center gap-2">
                       <span>Current Status:</span> 
