@@ -3,10 +3,9 @@ import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
 import { 
   FaClock, FaUtensils, FaMapMarkerAlt, FaCheckCircle, FaPizzaSlice, 
-  FaTruck, FaStoreAlt, FaMap, FaMoneyBillWave, FaCreditCard, FaStar 
+  FaTruck, FaStoreAlt, FaMoneyBillWave, FaCreditCard, FaStar 
 } from 'react-icons/fa';
 
-import OrderTrackingMap from '../components/OrderTrackingMap';
 import { useSocket } from '../hooks/useSocket';
 
 // Inline Sub-Component for handling Item Ratings interactively
@@ -73,7 +72,6 @@ const ItemRatingWidget = ({ itemId, subOrderId }) => {
 const UserOrderPage = ({ currentUser }) => {
   const [orders, setOrders] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [activeMapOrderId, setActiveMapOrderId] = useState(null);
   const navigate = useNavigate();
   const { socket } = useSocket();
 
@@ -104,7 +102,6 @@ const UserOrderPage = ({ currentUser }) => {
     socket.on('orderStatusUpdated', async (data) => {
       console.log("⚡ Real-time stage status catch on user client:", data);
       
-      // 1. Instantly update the visual status on screen so the user sees progress immediately
       setOrders((prevOrders) =>
         prevOrders.map((order) => {
           const orderIdStr = order._id?.toString();
@@ -118,7 +115,11 @@ const UserOrderPage = ({ currentUser }) => {
           if (orderIdStr === masterIdStr || hasSubOrder) {
             const updatedShopOrders = order.shopOrders.map((shopOrder) => {
               if (shopOrder._id?.toString() === targetSubOrderIdStr) {
-                return { ...shopOrder, status: data.newStatus };
+                return { 
+                  ...shopOrder, 
+                  status: data.newStatus,
+                  deliveryBoy: data.deliveryBoy || shopOrder.deliveryBoy 
+                };
               }
               return shopOrder;
             });
@@ -130,12 +131,9 @@ const UserOrderPage = ({ currentUser }) => {
             };
           }
           return order;
-          })
-        );
+        })
+      );
 
-      // 🌟 FIX: Silently fetch the latest orders from the database after a 1-second delay
-      // This gives your backend database enough time to finish saving the "Online/Prepaid" payment status 
-      // and updates the UI automatically without forcing a manual page refresh.
       setTimeout(() => {
         fetchUserOrders(false);
       }, 1000);
@@ -232,14 +230,11 @@ const UserOrderPage = ({ currentUser }) => {
       ) : (
         <div className="space-y-6">
           {orders.map((masterOrder) => {
-            const currentOrderIdStr = String(masterOrder._id);
-            const isMapActive = activeMapOrderId === currentOrderIdStr;
-            
-            // Checking actual data structure dynamically
             const isCOD = checkIfCOD(masterOrder.paymentMethod);
 
+            // Button only shows if a delivery boy has explicitly accepted the order
             const trackableSubOrder = masterOrder.shopOrders?.find(sub => 
-              ['Driver Assigned', 'Out for Delivery', 'On Way'].includes(sub.status)
+              sub.deliveryBoy && ['Driver Assigned', 'Out for Delivery', 'On Way'].includes(sub.status)
             );
 
             const isEverythingDelivered = masterOrder.shopOrders?.every(sub => 
@@ -319,30 +314,14 @@ const UserOrderPage = ({ currentUser }) => {
                     </div>
                     
                     <div className="flex items-center gap-4 flex-wrap sm:flex-nowrap">
-                      {!isEverythingDelivered && (
-                        <>
-                          {trackableSubOrder ? (
-                            <button 
-                              onClick={() => navigate(`/order-tracking/${masterOrder._id}/${trackableSubOrder._id}`)}
-                              className="flex items-center gap-1.5 text-xs font-bold text-white bg-gradient-to-r from-orange-500 to-red-500 hover:from-orange-600 hover:to-red-600 px-4 py-2 rounded-xl transition-all cursor-pointer select-none relative z-30 shadow-md shadow-orange-500/20 animate-pulse border-none"
-                            >
-                              <FaTruck size={12} className="animate-bounce" />
-                              <span>Track Delivery Boy</span>
-                            </button>
-                          ) : (
-                            <button 
-                              onClick={(e) => {
-                                e.preventDefault();
-                                e.stopPropagation();
-                                setActiveMapOrderId(isMapActive ? null : currentOrderIdStr);
-                              }}
-                              className="flex items-center gap-1.5 text-xs font-bold text-orange-600 bg-orange-50 hover:bg-orange-100 px-3 py-1.5 rounded-xl border border-orange-200 transition-colors cursor-pointer select-none relative z-30"
-                            >
-                              <FaMap size={12} />
-                              <span>{isMapActive ? "Close Map Route" : "Open Map Route Direction"}</span>
-                            </button>
-                          )}
-                        </>
+                      {!isEverythingDelivered && trackableSubOrder && (
+                        <button 
+                          onClick={() => navigate(`/order-tracking/${masterOrder._id}/${trackableSubOrder._id}`)}
+                          className="flex items-center gap-1.5 text-xs font-bold text-white bg-gradient-to-r from-orange-500 to-red-500 hover:from-orange-600 hover:to-red-600 px-4 py-2 rounded-xl transition-all cursor-pointer select-none relative z-30 shadow-md shadow-orange-500/20 animate-pulse border-none"
+                        >
+                          <FaTruck size={12} className="animate-bounce" />
+                          <span>Track Delivery Boy</span>
+                        </button>
                       )}
 
                       <div className="flex items-center gap-3">
@@ -362,18 +341,6 @@ const UserOrderPage = ({ currentUser }) => {
 
                     </div>
                   </div>
-
-                  {isMapActive && !trackableSubOrder && !isEverythingDelivered && (
-                    <div className="mt-2 w-full min-h-[400px] h-[400px] block bg-white rounded-2xl border border-gray-100 overflow-hidden relative shadow-md">
-                      <OrderTrackingMap 
-                        customerCoords={[
-                          masterOrder.deliveryAddress?.lat || 19.0820, 
-                          masterOrder.deliveryAddress?.lng || 72.8888
-                        ]} 
-                        initialRiderCoords={[19.0760, 72.8777]} 
-                      />
-                    </div>
-                  )}
                 </div>
 
               </div>

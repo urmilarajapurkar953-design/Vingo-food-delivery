@@ -21,14 +21,40 @@ const OwnerOrderPage = ({ currentOwnerId }) => {
 
     if (!socket) return;
 
-    socket.on('newOrderReceived', (incomingOrder) => {
-      console.log("Inbound request received live inside kitchen context:", incomingOrder);
-      
-      setNewLiveIndicator(prev => prev + 1);
-      setShopOrders(prev => [incomingOrder, ...prev]);
-      setLocalStatuses(prev => ({ ...prev, [incomingOrder.subOrderId]: incomingOrder.status || "Pending" }));
-    });
+socket.on('newOrderReceived', (incomingOrder) => {
+  console.log("Inbound request received live inside kitchen context:", incomingOrder);
+  
+  // 🔍 BULLETPROOF CHECK: Scan all possible backend variable names for online payment types
+  const extractedPayment = 
+    incomingOrder.paymentMethod || 
+    incomingOrder.paymentMode || 
+    incomingOrder.payment?.method || 
+    incomingOrder.paymentDetails?.method ||
+    "ONLINE"; // Defaulting to Online if the variable is present but differently shaped
 
+  // Clean and unify the string value to match your UI presentation expectations
+  let cleanPaymentString = "CASH ON DELIVERY";
+  if (typeof extractedPayment === 'string') {
+    const upperStr = extractedPayment.toUpperCase();
+    if (upperStr.includes("ONLINE") || upperStr.includes("PREPAID") || upperStr.includes("RAZORPAY") || upperStr.includes("STRIPE")) {
+      cleanPaymentString = "ONLINE";
+    }
+  }
+
+  // Merge the cleaned variable directly into the incoming state object layer
+  const mappedLiveOrder = {
+    ...incomingOrder,
+    paymentMethod: cleanPaymentString,
+    paymentMode: cleanPaymentString
+  };
+  
+  setNewLiveIndicator(prev => prev + 1);
+  setShopOrders(prev => [mappedLiveOrder, ...prev]);
+  setLocalStatuses(prev => ({ 
+    ...prev, 
+    [incomingOrder.subOrderId]: incomingOrder.status || "Pending" 
+  }));
+});
     return () => {
       socket.off('newOrderReceived');
     };
@@ -49,7 +75,7 @@ const OwnerOrderPage = ({ currentOwnerId }) => {
     } catch (err) {
       console.error("Error sourcing metrics database:", err);
     } finally {
-      loading && setLoading(false);
+      if (loading) setLoading(false);
     }
   };
 
@@ -83,8 +109,8 @@ const OwnerOrderPage = ({ currentOwnerId }) => {
           if (contextualOrder) {
             socket.emit('joinRoom', masterOrderId.toString()); 
             
-            // 🌟 FIXED: Use fallback checking for the socket payload here as well
-            const dynamicPaymentMethod = contextualOrder.paymentMethod || contextualOrder.paymentMode || "COD";
+            const rawPayment = contextualOrder.paymentMethod || contextualOrder.paymentMode || "COD";
+            const dynamicPaymentMethod = String(rawPayment).toUpperCase().includes("COD") ? "COD" : "Online";
 
             const dispatchJobPayload = {
               _id: subOrderId, 
@@ -175,6 +201,9 @@ const OwnerOrderPage = ({ currentOwnerId }) => {
             const hasUnsavedChanges = currentChosenStatus !== order.status;
             const isCurrentlySaving = isSavingMap[order.subOrderId] || false;
 
+            const orderSubTotal = Number(order.subTotal || 0);
+            const displayTotal = orderSubTotal >= 500 ? orderSubTotal : orderSubTotal + 40;
+
             return (
               <div 
                 key={order.subOrderId} 
@@ -211,7 +240,7 @@ const OwnerOrderPage = ({ currentOwnerId }) => {
                 </div>
 
                 <div className="flex flex-wrap gap-4 items-center mb-6">
-                  {order.items.map((itemGroup, idx) => {
+                  {order.items && order.items.map((itemGroup, idx) => {
                     const name = itemGroup.item?.name || "Menu Item";
                     const image = itemGroup.item?.image;
                     return (
@@ -234,13 +263,24 @@ const OwnerOrderPage = ({ currentOwnerId }) => {
                 </div>
 
                 <div className="bg-neutral-50 rounded-2xl p-4 flex flex-wrap justify-between items-center gap-4 border border-neutral-100">
-                  <div className="flex gap-4 items-center">
+                  <div className="flex gap-4 items-center flex-wrap">
                     <div className="text-xs text-neutral-500">
-                      {/* 🌟 FIXED: Evaluates paymentMethod first, falls back to paymentMode, defaults to COD */}
-                      Payment Method: <strong className="text-neutral-700 block uppercase text-[10px] tracking-wider">{order.paymentMethod || order.paymentMode || "COD"}</strong>
+                      Payment Method: 
+                      <strong className="text-neutral-700 block uppercase text-[10px] tracking-wider mt-0.5">
+                        {order.paymentMethod || order.paymentMode || "Online"}
+                      </strong>
                     </div>
+                    
                     <div className="text-xs text-neutral-500 border-l pl-4 border-neutral-200">
-                      Total Amount: <strong className="text-base font-black text-neutral-800 block">₹{Number(order.subTotal) + 40}</strong>
+                      Total Amount: 
+                      <strong className="text-base font-black text-neutral-800 block">
+                        ₹{displayTotal}
+                      </strong>
+                      {orderSubTotal >= 500 && (
+                        <span className="text-[9px] text-emerald-600 font-bold block tracking-wide">
+                          🎉 FREE DELIVERY APPLIED
+                        </span>
+                      )}
                     </div>
                     
                     <div className="text-xs text-neutral-500 border-l pl-4 border-neutral-200 flex items-center gap-2">
@@ -252,7 +292,7 @@ const OwnerOrderPage = ({ currentOwnerId }) => {
                     </div>
                   </div>
 
-                  <div className="flex items-center gap-3">
+                  <div className="flex items-center gap-3 ml-auto sm:ml-0">
                     <div className="flex items-center gap-1.5">
                       <label className="text-[11px] font-black uppercase tracking-wider text-neutral-400">Change To:</label>
                       <select

@@ -13,12 +13,19 @@ const razorpayInstance = new Razorpay({
 });
 
 // =========================================================================
-// 📡 GLOBAL COMPATIBILITY UTILITY: INSENSITIVE CHECK MATCHING THE FRONTEND
+// 📡 GLOBAL COMPATIBILITY UTILITIES
 // =========================================================================
 const checkIfCOD = (paymentMethodString) => {
   if (!paymentMethodString) return false;
   const normalized = String(paymentMethodString).toLowerCase();
   return normalized.includes('cod') || normalized.includes('cash');
+};
+
+// Helper to determine the real total with delivery rules applied
+const calculateTotalWithDeliveryRules = (subTotalAmount) => {
+  const numericSubtotal = Number(subTotalAmount) || 0;
+  // If the subtotal is 500 or more, delivery is free (Add 0), otherwise add 40
+  return numericSubtotal >= 500 ? numericSubtotal : numericSubtotal + 40;
 };
 
 // ==========================================
@@ -101,10 +108,13 @@ export const verifyPaymentAndPlaceOrder = async (req, res) => {
       });
     });
 
+    let overallCalculatedSubtotal = 0;
     const shopOrdersPayload = [];
     for (const shopId in groupedByShop) {
       const shopOrderItems = groupedByShop[shopId];
       const shopSubtotal = shopOrderItems.reduce((sum, item) => sum + (item.price * item.quantity), 0);
+      overallCalculatedSubtotal += shopSubtotal;
+
       const activeShopRecord = await Shop.findById(shopId);
       if (!activeShopRecord) return res.status(404).json({ success: false, message: `The shop listing with ID ${shopId} could not be located.` });
       
@@ -120,6 +130,9 @@ export const verifyPaymentAndPlaceOrder = async (req, res) => {
       });
     }
 
+    // 🛠️ Secure Server-Side override for total billing calculations
+    const finalSanitizedTotal = calculateTotalWithDeliveryRules(overallCalculatedSubtotal);
+
     const unifiedOrder = new Order({
       user: userId, 
       paymentMethod: paymentMethod || "Online", 
@@ -129,7 +142,7 @@ export const verifyPaymentAndPlaceOrder = async (req, res) => {
       deliveryAddress: { text: deliveryAddress.text, lat: Number(lat), lon: Number(lon) },
       shopOrders: shopOrdersPayload, 
       items: items.map(item => ({ product: item.product, quantity: item.quantity })), 
-      totalAmount: Number(totalAmount)
+      totalAmount: finalSanitizedTotal
     });
 
     const savedOrder = await unifiedOrder.save();
@@ -150,12 +163,12 @@ export const verifyPaymentAndPlaceOrder = async (req, res) => {
             customer: fullyPopulatedOrder.user,
             deliveryAddress: fullyPopulatedOrder.deliveryAddress,
             paymentMethod: "Online Payment", 
-            paymentStatus: "Paid",                     
+            paymentStatus: "Paid",                    
             status: subOrder.status || "Pending",
             shop: subOrder.shop,
             items: subOrder.shopOrderItems,
             subTotal: subOrder.subTotal,
-            totalWithDelivery: Number(subOrder.subTotal) + 40, 
+            totalWithDelivery: calculateTotalWithDeliveryRules(subOrder.subTotal), 
             createdAt: fullyPopulatedOrder.createdAt
           });
         }
@@ -207,10 +220,13 @@ export const placeOrder = async (req, res) => {
       });
     });
 
+    let overallCalculatedSubtotal = 0;
     const shopOrdersPayload = [];
     for (const shopId in groupedByShop) {
       const shopOrderItems = groupedByShop[shopId];
       const shopSubtotal = shopOrderItems.reduce((sum, item) => sum + (item.price * item.quantity), 0);
+      overallCalculatedSubtotal += shopSubtotal;
+
       const activeShopRecord = await Shop.findById(shopId);
       if (!activeShopRecord) return res.status(404).json({ success: false, message: `The shop listing with ID ${shopId} could not be located.` });
       
@@ -226,6 +242,9 @@ export const placeOrder = async (req, res) => {
       });
     }
 
+    // 🛠️ Secure Server-Side override for total billing calculations
+    const finalSanitizedTotal = calculateTotalWithDeliveryRules(overallCalculatedSubtotal);
+
     const unifiedOrder = new Order({
       user: userId, 
       paymentMethod,
@@ -233,7 +252,7 @@ export const placeOrder = async (req, res) => {
       deliveryAddress: { text: deliveryAddress.text, lat: Number(lat), lon: Number(lon) },
       shopOrders: shopOrdersPayload, 
       items: items.map(item => ({ product: item.product, quantity: item.quantity })), 
-      totalAmount: Number(totalAmount)
+      totalAmount: finalSanitizedTotal
     });
 
     const savedOrder = await unifiedOrder.save();
@@ -259,7 +278,7 @@ export const placeOrder = async (req, res) => {
             shop: subOrder.shop,
             items: subOrder.shopOrderItems,
             subTotal: subOrder.subTotal,
-            totalWithDelivery: Number(subOrder.subTotal) + 40, 
+            totalWithDelivery: calculateTotalWithDeliveryRules(subOrder.subTotal), 
             createdAt: fullyPopulatedOrder.createdAt
           });
         }
@@ -344,7 +363,7 @@ export const getOwnerShopOrders = async (req, res) => {
             shop: subOrder.shop,
             items: subOrder.shopOrderItems,
             subTotal: subOrder.subTotal,
-            totalWithDelivery: Number(subOrder.subTotal) + 40, 
+            totalWithDelivery: calculateTotalWithDeliveryRules(subOrder.subTotal), 
             createdAt: masterOrder.createdAt
           });
         }
@@ -360,7 +379,7 @@ export const getOwnerShopOrders = async (req, res) => {
 };
 
 // ==========================================
-// 6. UPDATE SUB-ORDER STATUS & DRIVER DISPATCH (ULTRA-COMPATIBLE OVERRIDE)
+// 6. UPDATE SUB-ORDER STATUS & DRIVER DISPATCH
 // ==========================================
 export const updateSubOrderStatus = async (req, res) => {
   try {
@@ -413,7 +432,8 @@ export const updateSubOrderStatus = async (req, res) => {
         });
         await newAssignment.save();
 
-        const totalWithDelivery = Number(subOrder.subTotal) + 40;
+        // 🛠️ Dynamic Calculation check applied here
+        const totalWithDelivery = calculateTotalWithDeliveryRules(subOrder.subTotal);
         const isCOD = checkIfCOD(updatedMasterOrder.paymentMethod);
         const collectionInstruction = isCOD 
           ? `COLLECT CASH AT DOORSTEP: ₹${totalWithDelivery}` 
@@ -429,7 +449,6 @@ export const updateSubOrderStatus = async (req, res) => {
               shopAddress: activeShop?.text || activeShop?.address || "Store Address",
               deliveryAddress: updatedMasterOrder.deliveryAddress,
               subTotal: subOrder.subTotal,
-              // 🌟 SHOTGUN APPROACH: We pass ALL variations so frontend verification CANNOT fail
               paymentMethod: isCOD ? "COD Cash on Delivery" : "Online Prepaid Payment", 
               collectionInstruction: collectionInstruction      
             });
@@ -445,13 +464,13 @@ export const updateSubOrderStatus = async (req, res) => {
 };
 
 // ==========================================
-// 7. GET AVAILABLE JOBS FOR DELIVERY BOYS (ULTRA-COMPATIBLE OVERRIDE)
+// 7. GET AVAILABLE JOBS FOR DELIVERY BOYS
 // ==========================================
 export const getAvailableJobs = async (req, res) => {
   try {
     const activeOrders = await Order.find({ "shopOrders.status": "Out for Delivery" })
       .populate("user", "fullName name email phone")
-      .populate({ path: "shopOrders.status" === "Out for Delivery" ? "shopOrders.shop" : "shopOrders.shop", select: "name image text address city" })
+      .populate({ path: "shopOrders.shop", select: "name image text address city" })
       .populate({ path: "shopOrders.shopOrderItems.item", select: "name price image" })
       .lean();
 
@@ -462,14 +481,14 @@ export const getAvailableJobs = async (req, res) => {
         if (subOrder.status === "Out for Delivery" && !subOrder.deliveryBoy) {
           
           const isCOD = checkIfCOD(masterOrder.paymentMethod);
-          const totalWithDelivery = Number(subOrder.subTotal) + 40;
+          // 🛠️ Dynamic Calculation check applied here
+          const totalWithDelivery = calculateTotalWithDeliveryRules(subOrder.subTotal);
           
           broadcastedJobs.push({
             masterOrderId: masterOrder._id,
             subOrderId: subOrder._id,
             customer: masterOrder.user,
             deliveryAddress: masterOrder.deliveryAddress,
-            // 🌟 SHOTGUN APPROACH: Matches both .includes('cod') and .includes('cash') perfectly
             paymentMethod: isCOD ? "COD Cash on Delivery" : "Online Prepaid Payment", 
             collectionInstruction: isCOD 
               ? `COLLECT CASH AT DOORSTEP: ₹${totalWithDelivery}` 
@@ -490,6 +509,7 @@ export const getAvailableJobs = async (req, res) => {
     return res.status(500).json({ success: false, message: error.message });
   }
 };
+
 // ==========================================
 // 8. RATE ITEM
 // ==========================================

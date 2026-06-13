@@ -4,21 +4,20 @@ import { FaPlus, FaMinus, FaTrash, FaArrowLeft } from 'react-icons/fa';
 import { addToCart, decrementQuantity, removeFromCart } from '../redux/user.Slice';
 import { useNavigate } from 'react-router-dom';
 
-
 const Cart = () => {
   const { cartItem } = useSelector((state) => state.user);
   const dispatch = useDispatch();
   const navigate = useNavigate();
 
-  // Unified delivery charge parameter matching your checkout logic
-  const DELIVERY_FEE = 40;
-
+  // 🛠️ FIXED: Restored the missing navigation handler
   const handleCheckout = () => {
-    // Navigate to the checkout route you defined in App.js
     navigate('/checkout');
   };
 
   const totalPrice = cartItem.reduce((acc, item) => acc + (item.price * item.quantity), 0);
+  
+  // 🌟 DYNAMIC THRESHOLD RULE: Free delivery if order subtotal is >= 500
+  const DELIVERY_FEE = totalPrice >= 500 ? 0 : 40;
   
   // Calculate final total including delivery charges
   const finalTotal = totalPrice + DELIVERY_FEE;
@@ -68,6 +67,13 @@ const Cart = () => {
                 </button>
               </div>
             ))}
+
+            {/* Visual Free Delivery Banner Hint */}
+            {totalPrice < 500 && (
+              <div className="bg-orange-50 border border-orange-100 p-4 rounded-2xl text-xs font-bold text-neutral-600">
+                💡 Add <span className="text-[#ff4d2d]">₹{500 - totalPrice}</span> more to unlock <span className="text-green-600 font-extrabold">FREE DELIVERY</span>!
+              </div>
+            )}
           </div>
 
           {/* Order Summary */}
@@ -79,7 +85,11 @@ const Cart = () => {
             </div>
             <div className="flex justify-between mb-4 pb-4 border-b border-gray-100">
               <span className="text-gray-500">Delivery Fee</span>
-              <span className="text-green-600 font-bold">₹{DELIVERY_FEE}</span>
+              {DELIVERY_FEE === 0 ? (
+                <span className="text-green-600 font-black tracking-wide bg-green-50 px-2 py-0.5 rounded text-xs uppercase">FREE</span>
+              ) : (
+                <span className="text-gray-800 font-bold">₹{DELIVERY_FEE}</span>
+              )}
             </div>
             <div className="flex justify-between mb-6">
               <span className="text-lg font-bold">Total</span>

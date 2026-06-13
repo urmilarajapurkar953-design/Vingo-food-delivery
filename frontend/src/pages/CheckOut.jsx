@@ -4,7 +4,7 @@ import { FaMapMarkerAlt, FaMoneyBillWave, FaCreditCard, FaSearch, FaCrosshairs }
 import { useNavigate } from 'react-router-dom';
 import toast from 'react-hot-toast';
 import axios from 'axios';
-import 'leaflet/dist/leaflet.css'; // Import it right here
+import 'leaflet/dist/leaflet.css';
 
 // Redux Actions
 import { clearCart } from '../redux/user.Slice'; 
@@ -14,7 +14,6 @@ import { setLocation, setAddress } from '../redux/mapSlice';
 import { MapContainer, TileLayer, Marker, useMap } from 'react-leaflet';
 import L from 'leaflet';
 
-// Fix for Leaflet default icon issue in React
 import markerIcon from 'leaflet/dist/images/marker-icon.png';
 import markerShadow from 'leaflet/dist/images/marker-shadow.png';
 let DefaultIcon = L.icon({
@@ -25,7 +24,6 @@ let DefaultIcon = L.icon({
 });
 L.Marker.prototype.options.icon = DefaultIcon;
 
-// Helper component to move the map view
 function RecenterMap({ lat, lon, forceUpdate }) {
   const map = useMap();
   useEffect(() => {
@@ -51,18 +49,18 @@ const CheckOut = () => {
   const [loading, setLoading] = useState(false);
   const [forceMapUpdate, setForceMapUpdate] = useState(0);
 
-  // Sync initial address from Redux
   useEffect(() => {
     if (currentAddress) setDeliveryAddress(currentAddress);
   }, [currentAddress]);
 
-  // --- MULTI-SHOP DYNAMIC DELIVERY FEE CALCULATIONS ---
+  // --- MULTI-SHOP DYNAMIC DELIVERY FEE CALCULATIONS WITH WAIVER ---
   const subtotal = cartItem.reduce((acc, item) => acc + item.price * item.quantity, 0);
   
   const uniqueShops = [...new Set(cartItem.map(item => item.shop || item.shopId).filter(Boolean))];
   const totalShopsCount = uniqueShops.length > 0 ? uniqueShops.length : 1;
   
-  const deliveryFee = totalShopsCount * 40; 
+  // 🌟 DYNAMIC THRESHOLD RULE: If subtotal >= 500, delivery fee is dropped entirely
+  const deliveryFee = subtotal >= 500 ? 0 : totalShopsCount * 40; 
   const total = subtotal + deliveryFee;
 
   const handleSearchAddress = async () => {
@@ -92,11 +90,10 @@ const CheckOut = () => {
       console.error("Geocoding error:", error);
       toast.error("Failed to search location.");
     } finally {
-      setLoading(false);
+      loading && setLoading(false);
     }
   };
 
-  // 🛠️ SPLIT ACTION WORKFLOW MANAGER
   const handlePlaceOrder = async () => {
     if (!cartItem || cartItem.length === 0) {
       return toast.error("Your cart is empty.");
@@ -106,7 +103,6 @@ const CheckOut = () => {
       return toast.error("Please enter a valid delivery address.");
     }
 
-    // Structure baseline data payload block matching backend expected layouts
     const baseOrderPayload = {
       items: cartItem.map(item => ({
         product: item._id, 
@@ -121,15 +117,12 @@ const CheckOut = () => {
     };
 
     if (paymentMethod === 'Online') {
-      // Execute Razorpay Script overlay workflow
       handleOnlinePaymentFlow(baseOrderPayload);
     } else {
-      // Execute simple immediate Cash on Delivery server routing
       handleCodPaymentFlow(baseOrderPayload);
     }
   };
 
-  // 📦 PIPELINE A: CASH ON DELIVERY WORKFLOW
   const handleCodPaymentFlow = async (payload) => {
     setLoading(true);
     try {
@@ -153,12 +146,9 @@ const CheckOut = () => {
     }
   };
 
-  // 💳 PIPELINE B: RAZORPAY ONLINE PAYMENT GATEWAY FLOW
-  // 💳 PIPELINE B: RAZORPAY ONLINE PAYMENT GATEWAY FLOW
   const handleOnlinePaymentFlow = async (payload) => {
     setLoading(true);
     try {
-      // 1. Request Order Reference block registration on backend
       const { data } = await axios.post("http://localhost:8000/api/payment/razor-order", { amount: total }, {
         withCredentials: true
       });
@@ -169,7 +159,6 @@ const CheckOut = () => {
 
       const { razorpayOrder } = data;
 
-      // 2. Open configuration script layout window constructor
       const options = {
         key: import.meta.env.VITE_RAZORPAY_KEY_ID || "YOUR_TEST_KEY_ID",
         amount: razorpayOrder.amount,
@@ -180,7 +169,6 @@ const CheckOut = () => {
         handler: async function (paymentResponse) {
           try {
             setLoading(true);
-            // 3. Authenticate signature block before recording data transaction
             const verifyRes = await axios.post("http://localhost:8000/api/payment/verify", {
               razorpay_order_id: paymentResponse.razorpay_order_id,
               razorpay_payment_id: paymentResponse.razorpay_payment_id,
@@ -188,8 +176,6 @@ const CheckOut = () => {
             }, { withCredentials: true });
 
             if (verifyRes.data.success) {
-              // 4. Save order to DB upon successful verification
-              // 🔹 FIX: Changed 'Online Payment (Razorpay)' to 'Online' to satisfy Mongoose enum validation
               const finalPayload = { 
                 ...payload, 
                 paymentMethod: 'Online', 
@@ -282,7 +268,6 @@ const CheckOut = () => {
             </button>
           </div>
 
-          {/* MAP CONTAINER */}
           <div className="w-full h-64 bg-gray-200 rounded-2xl overflow-hidden border border-gray-100 z-0">
             {location.lat && location.lon ? (
               <MapContainer 
@@ -349,11 +334,13 @@ const CheckOut = () => {
             </div>
             <div className="flex justify-between">
               <span className="text-gray-500">
-                Delivery Fee {totalShopsCount > 1 && `(${totalShopsCount} Shops)`}
+                Delivery Fee {totalShopsCount > 1 && deliveryFee > 0 && `(${totalShopsCount} Shops)`}
               </span>
-              <span className="font-bold text-green-600">
-                ₹{deliveryFee}
-              </span>
+              {deliveryFee === 0 ? (
+                <span className="text-green-600 font-black tracking-wide bg-green-50 px-2 py-0.5 rounded text-xs uppercase">FREE</span>
+              ) : (
+                <span className="font-bold text-gray-800">₹{deliveryFee}</span>
+              )}
             </div>
           </div>
           <div className="flex justify-between mt-4">
@@ -374,7 +361,7 @@ const CheckOut = () => {
             "Pay and Place Order"
           ) : (
             "Place Order"
-          )}
+          ) }
         </button>
       </div>
     </div>

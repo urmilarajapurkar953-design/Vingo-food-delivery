@@ -21,7 +21,6 @@ const OrderTrackingPage = () => {
   useEffect(() => {
     if (!socket) return;
 
-    // 🌟 Establish dynamic tracking stream exclusively for this sub-order instance room
     socket.emit('joinOrderTrackingRoom', { subOrderId });
 
     socket.on('orderStatusUpdated', (data) => {
@@ -38,13 +37,11 @@ const OrderTrackingPage = () => {
       }
     });
 
-    // 🌟 Enhanced real-time tracking radar listener
     socket.on('riderLocationUpdated', (data) => {
       console.log("📍 Telemetry Radar Signal Caught:", data);
       
       const currentRiderId = orderData?.deliveryBoy?._id || orderData?.deliveryBoy;
       
-      // Correlate packet markers by matching target order identity parameters
       if (
         data.subOrderId?.toString() === subOrderId?.toString() || 
         (data.deliveryBoyId && currentRiderId && data.deliveryBoyId.toString() === currentRiderId.toString())
@@ -52,7 +49,6 @@ const OrderTrackingPage = () => {
         if (data.coords?.lat && data.coords?.lng) {
           setRiderCoords([data.coords.lat, data.coords.lng]);
         } else if (data.coords && Array.isArray(data.coords)) {
-          // Fallback check if arrays format [lat, lng] are sent directly instead of nested keys
           setRiderCoords([data.coords[0], data.coords[1]]);
         }
       }
@@ -101,7 +97,6 @@ const OrderTrackingPage = () => {
   return (
     <div className="max-w-6xl mx-auto p-4 md:p-6 min-h-screen bg-gray-50 mt-[50px]">
       
-      {/* Navigation Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6 bg-white p-4 rounded-2xl border border-gray-100 shadow-sm">
         <button 
           onClick={() => navigate('/my-orders')}
@@ -129,10 +124,8 @@ const OrderTrackingPage = () => {
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Left Information Panel */}
         <div className="lg:col-span-1 space-y-6">
           
-          {/* Delivery Agent Card */}
           <div className="bg-white rounded-3xl p-5 border border-gray-100 shadow-sm">
             <h2 className="text-xs font-black text-gray-400 tracking-wider uppercase mb-4 flex items-center gap-1.5">
               <FaMotorcycle className="text-orange-500" /> Delivery Agent Details
@@ -162,7 +155,6 @@ const OrderTrackingPage = () => {
             )}
           </div>
 
-          {/* Store & Route Addresses */}
           <div className="bg-white rounded-3xl p-5 border border-gray-100 shadow-sm space-y-4">
             <div>
               <h2 className="text-xs font-black text-gray-400 tracking-wider uppercase mb-3 flex items-center gap-1.5">
@@ -180,7 +172,6 @@ const OrderTrackingPage = () => {
             </div>
           </div>
 
-          {/* Package Details */}
           <div className="bg-white rounded-3xl p-5 border border-gray-100 shadow-sm space-y-4">
             <h2 className="text-xs font-black text-gray-400 tracking-wider uppercase flex items-center gap-1.5">
               <FaBox /> Items Package
@@ -222,7 +213,6 @@ const OrderTrackingPage = () => {
 
         </div>
 
-        {/* Live Tracking Map View Container */}
         <div className="lg:col-span-2 h-[500px] lg:h-auto min-h-[500px] bg-white rounded-3xl border border-gray-100 shadow-sm overflow-hidden relative">
           <OrderTrackingMap 
             customerCoords={[
