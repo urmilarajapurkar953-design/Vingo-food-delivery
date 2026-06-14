@@ -21,40 +21,42 @@ const OwnerOrderPage = ({ currentOwnerId }) => {
 
     if (!socket) return;
 
-socket.on('newOrderReceived', (incomingOrder) => {
-  console.log("Inbound request received live inside kitchen context:", incomingOrder);
-  
-  // 🔍 BULLETPROOF CHECK: Scan all possible backend variable names for online payment types
-  const extractedPayment = 
-    incomingOrder.paymentMethod || 
-    incomingOrder.paymentMode || 
-    incomingOrder.payment?.method || 
-    incomingOrder.paymentDetails?.method ||
-    "ONLINE"; // Defaulting to Online if the variable is present but differently shaped
+    // Clear any lingering instance handlers to prevent state doubling issues
+    socket.off('newOrderReceived');
 
-  // Clean and unify the string value to match your UI presentation expectations
-  let cleanPaymentString = "CASH ON DELIVERY";
-  if (typeof extractedPayment === 'string') {
-    const upperStr = extractedPayment.toUpperCase();
-    if (upperStr.includes("ONLINE") || upperStr.includes("PREPAID") || upperStr.includes("RAZORPAY") || upperStr.includes("STRIPE")) {
-      cleanPaymentString = "ONLINE";
-    }
-  }
+    socket.on('newOrderReceived', (incomingOrder) => {
+      console.log("📨 Live Order received inside kitchen context:", incomingOrder);
+      
+      // 🔍 Normalize the payment string cleanly from backend to frontend expectations
+      const rawPayment = 
+        incomingOrder.paymentMethod || 
+        incomingOrder.paymentMode || 
+        "Online Payment";
 
-  // Merge the cleaned variable directly into the incoming state object layer
-  const mappedLiveOrder = {
-    ...incomingOrder,
-    paymentMethod: cleanPaymentString,
-    paymentMode: cleanPaymentString
-  };
-  
-  setNewLiveIndicator(prev => prev + 1);
-  setShopOrders(prev => [mappedLiveOrder, ...prev]);
-  setLocalStatuses(prev => ({ 
-    ...prev, 
-    [incomingOrder.subOrderId]: incomingOrder.status || "Pending" 
-  }));
-});
+      let cleanPaymentString = "Online Payment";
+      if (rawPayment) {
+        const normalized = String(rawPayment).toLowerCase();
+        if (normalized.includes('cod') || normalized.includes('cash')) {
+          cleanPaymentString = "Cash on Delivery";
+        }
+      }
+
+      // Format incoming payload properties to match DB initialization schema exactly
+      const mappedLiveOrder = {
+        ...incomingOrder,
+        paymentMethod: cleanPaymentString,
+        paymentMode: cleanPaymentString
+      };
+      
+      setNewLiveIndicator(prev => prev + 1);
+      setShopOrders(prev => [mappedLiveOrder, ...prev]);
+      
+      setLocalStatuses(prev => ({ 
+        ...prev, 
+        [incomingOrder.subOrderId]: incomingOrder.status || "Pending" 
+      }));
+    });
+
     return () => {
       socket.off('newOrderReceived');
     };
@@ -64,10 +66,20 @@ socket.on('newOrderReceived', (incomingOrder) => {
     try {
       const res = await axios.get('http://localhost:8000/api/orders/owner-dashboard', { withCredentials: true });
       if (res.data.success) {
-        setShopOrders(res.data.orders);
+        // Clean database outputs to use consistent title casing definitions
+        const formattedOrders = res.data.orders.map(order => {
+          const rawMethod = order.paymentMethod || order.paymentMode || "Online Payment";
+          const isCOD = String(rawMethod).toLowerCase().includes('cod') || String(rawMethod).toLowerCase().includes('cash');
+          return {
+            ...order,
+            paymentMethod: isCOD ? "Cash on Delivery" : "Online Payment"
+          };
+        });
+
+        setShopOrders(formattedOrders);
         
         const statusMap = {};
-        res.data.orders.forEach(order => {
+        formattedOrders.forEach(order => {
           statusMap[order.subOrderId] = order.status || "Pending";
         });
         setLocalStatuses(statusMap);
@@ -75,7 +87,7 @@ socket.on('newOrderReceived', (incomingOrder) => {
     } catch (err) {
       console.error("Error sourcing metrics database:", err);
     } finally {
-      if (loading) setLoading(false);
+      setLoading(false);
     }
   };
 
@@ -103,14 +115,14 @@ socket.on('newOrderReceived', (incomingOrder) => {
           )
         );
 
-        // ⚡ REAL-TIME DISPATCH: If status is updated to Out for Delivery, alert the driver network!
+        // ⚡ REAL-TIME DISPATCH: Alert the driver network if status is 'Out for Delivery'
         if (targetStatus === 'Out for Delivery' && socket) {
           const contextualOrder = shopOrders.find(item => item.subOrderId === subOrderId);
           if (contextualOrder) {
             socket.emit('joinRoom', masterOrderId.toString()); 
             
-            const rawPayment = contextualOrder.paymentMethod || contextualOrder.paymentMode || "COD";
-            const dynamicPaymentMethod = String(rawPayment).toUpperCase().includes("COD") ? "COD" : "Online";
+            const rawPayment = contextualOrder.paymentMethod || contextualOrder.paymentMode || "Online Payment";
+            const dynamicPaymentMethod = String(rawPayment).toLowerCase().includes("cod") || String(rawPayment).toLowerCase().includes("cash") ? "COD" : "Online";
 
             const dispatchJobPayload = {
               _id: subOrderId, 
@@ -267,7 +279,7 @@ socket.on('newOrderReceived', (incomingOrder) => {
                     <div className="text-xs text-neutral-500">
                       Payment Method: 
                       <strong className="text-neutral-700 block uppercase text-[10px] tracking-wider mt-0.5">
-                        {order.paymentMethod || order.paymentMode || "Online"}
+                        {order.paymentMethod}
                       </strong>
                     </div>
                     

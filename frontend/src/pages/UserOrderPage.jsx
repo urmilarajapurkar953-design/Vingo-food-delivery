@@ -73,7 +73,10 @@ const UserOrderPage = ({ currentUser }) => {
   const [orders, setOrders] = useState([]);
   const [loading, setLoading] = useState(true);
   const navigate = useNavigate();
-  const { socket } = useSocket();
+  
+  // Extract user ID layout strings safely
+  const currentUserIdStr = currentUser?. _id || currentUser?.id;
+  const { socket } = useSocket(currentUserIdStr);
 
   // Helper for robust case-insensitive checking
   const checkIfCOD = (methodString) => {
@@ -95,30 +98,53 @@ const UserOrderPage = ({ currentUser }) => {
   };
 
   useEffect(() => {
+    // 1. Initial Load from HTTP Database Route
     fetchUserOrders(true);
+  }, []);
 
+  useEffect(() => {
     if (!socket) return;
 
-    socket.on('orderStatusUpdated', async (data) => {
-      console.log("⚡ Real-time stage status catch on user client:", data);
+    // 🛠️ CRITICAL DIRECT HANDSHAKE:
+    // Ensures that if the socket connected before currentUser loaded into memory, 
+    // it registers to the backend room channel right here.
+    if (currentUserIdStr) {
+      console.log(`📢 Enforcing real-time room enrollment for user channel: ${currentUserIdStr}`);
+      socket.emit('joinRoom', currentUserIdStr.toString());
+      socket.emit('joinUserRoom', currentUserIdStr.toString());
+    }
+
+    // Clear any dangling/stale closures to prevent double event firing
+    socket.off('orderStatusUpdated');
+
+    // Bind real-time tracking listener directly to this live page instance
+    socket.on('orderStatusUpdated', (data) => {
+      console.log("⚡ DIRECT PAGE CATCH! Live tracking milestone received:", data);
       
-      setOrders((prevOrders) =>
-        prevOrders.map((order) => {
+      const targetStatus = data.newStatus || data.status || data.orderStatus;
+      const targetMasterId = data.masterOrderId || data.orderId;
+      const targetSubOrderId = data.subOrderId;
+
+      if (!targetStatus) return;
+
+      // Update state locally inside React memory
+      setOrders((prevOrders) => {
+        return prevOrders.map((order) => {
           const orderIdStr = order._id?.toString();
-          const masterIdStr = data.masterOrderId?.toString();
-          const targetSubOrderIdStr = data.subOrderId?.toString();
+          const masterIdStr = targetMasterId?.toString();
+          const subIdStr = targetSubOrderId?.toString();
 
           const hasSubOrder = order.shopOrders?.some(
-            (sub) => sub._id?.toString() === targetSubOrderIdStr
+            (sub) => sub._id?.toString() === subIdStr
           );
           
           if (orderIdStr === masterIdStr || hasSubOrder) {
             const updatedShopOrders = order.shopOrders.map((shopOrder) => {
-              if (shopOrder._id?.toString() === targetSubOrderIdStr) {
+              if (shopOrder._id?.toString() === subIdStr || (!targetSubOrderId && orderIdStr === masterIdStr)) {
                 return { 
                   ...shopOrder, 
-                  status: data.newStatus,
-                  deliveryBoy: data.deliveryBoy || shopOrder.deliveryBoy 
+                  status: targetStatus,
+                  deliveryBoy: data.deliveryBoy !== undefined ? data.deliveryBoy : shopOrder.deliveryBoy 
                 };
               }
               return shopOrder;
@@ -131,34 +157,46 @@ const UserOrderPage = ({ currentUser }) => {
             };
           }
           return order;
-        })
-      );
+        });
+      });
 
+      // 🚀 THE BULLETPROOF SAME-PAGE FALLSAFE
+      // We run a quiet API sync 400ms after the event arrives.
+      // Even if data key mismatches between backend routers cause the map function above to miss 
+      // an ID array check, this pulls from the updated DB and flashes the screen instantly without loading spinners!
+      console.log("🔄 Triggering background UI synchronization state validation...");
       setTimeout(() => {
-        fetchUserOrders(false);
-      }, 1000);
+        fetchUserOrders(false); 
+      }, 400);
     });
 
     return () => {
       socket.off('orderStatusUpdated');
     };
-  }, [socket]);
+  }, [socket, currentUserIdStr]);
 
-  const getStatusBadge = (status) => {
-    const styles = {
-      Pending: 'bg-amber-50 text-amber-700 border-amber-200',
-      Preparing: 'bg-orange-50 text-orange-700 border-orange-200 animate-pulse',
-      Kitchen: 'bg-orange-50 text-orange-700 border-orange-200 animate-pulse',
-      'Driver Assigned': 'bg-blue-50 text-blue-700 border-blue-200',
-      'Out for Delivery': 'bg-blue-50 text-blue-700 border-blue-200',
-      'On Way': 'bg-blue-50 text-blue-700 border-blue-200',
-      Completed: 'bg-green-50 text-green-700 border-green-200',
-      Delivered: 'bg-green-50 text-green-700 border-green-200'
-    };
-    return `px-3 py-1 rounded-full text-xs font-bold border ${styles[status] || styles.Pending}`;
+// Replace your existing getStatusBadge with this version:
+const getStatusBadge = (status) => {
+  // Ensure we are comparing strings safely to prevent undefined bugs
+  const normalizedStatus = status ? String(status) : 'Pending';
+  
+  const styles = {
+    Pending: 'bg-amber-50 text-amber-700 border-amber-200',
+    Preparing: 'bg-orange-50 text-orange-700 border-orange-200 animate-pulse', // Already set to animate
+    Kitchen: 'bg-orange-50 text-orange-700 border-orange-200 animate-pulse',
+    'Driver Assigned': 'bg-blue-50 text-blue-700 border-blue-200',
+    'Out for Delivery': 'bg-blue-50 text-blue-700 border-blue-200 animate-pulse',
+    'On Way': 'bg-blue-50 text-blue-700 border-blue-200 animate-pulse',
+    Completed: 'bg-neutral-100 text-neutral-600 border-neutral-300',
+    Delivered: 'bg-neutral-100 text-neutral-600 border-neutral-300'
   };
 
+  // Ensure this returns a fresh class string whenever 'status' changes
+  return `px-3 py-1 rounded-full text-xs font-bold border ${styles[normalizedStatus] || styles.Pending}`;
+};
+
   const renderTrackingTimeline = (currentStatus) => {
+    const safeStatus = currentStatus ? String(currentStatus) : 'Pending';
     const stages = [
       { key: ['Pending'], icon: FaClock, label: 'Placed' },
       { key: ['Preparing', 'Kitchen'], icon: FaPizzaSlice, label: 'Kitchen' },
@@ -166,34 +204,34 @@ const UserOrderPage = ({ currentUser }) => {
       { key: ['Completed', 'Delivered'], icon: FaCheckCircle, label: 'Delivered' }
     ];
 
-    const isFullyDelivered = ['Completed', 'Delivered'].includes(currentStatus);
-    const currentIdx = stages.findIndex(s => s.key.includes(currentStatus));
+    const currentIdx = stages.findIndex(s => s.key.some(k => k.toLowerCase() === safeStatus.toLowerCase()));
+    const isFullyDelivered = ['completed', 'delivered'].includes(safeStatus.toLowerCase());
 
     return (
       <div className="flex items-center justify-between max-w-xl mx-auto my-6 px-4">
         {stages.map((stage, idx) => {
           const Icon = stage.icon;
           
-          const isDone = isFullyDelivered ? false : idx <= currentIdx;
-          const isActive = isFullyDelivered ? false : idx === currentIdx;
+          const isDone = isFullyDelivered ? true : idx <= currentIdx;
+          const isActive = !isFullyDelivered && idx === currentIdx;
 
           return (
             <div key={idx} className="flex items-center flex-1 last:flex-none">
               <div className="flex flex-col items-center relative">
                 <div 
                   className={`w-10 h-10 rounded-full flex items-center justify-center border-2 transition-all duration-500 ${
-                    isFullyDelivered 
-                      ? 'bg-neutral-50 border-neutral-200 text-neutral-400' 
+                    isFullyDelivered
+                      ? 'bg-neutral-100 border-neutral-300 text-neutral-400' 
                       : isDone 
                         ? 'bg-orange-500 border-orange-500 text-white shadow-md shadow-orange-500/20' 
                         : 'bg-white border-gray-200 text-gray-300'
                   } ${isActive ? 'ring-4 ring-orange-100 animate-bounce' : ''}`}
                 >
-                  <Icon size={14} className={isActive && (currentStatus === 'Preparing' || currentStatus === 'Kitchen') ? 'animate-spin-slow' : ''} />
+                  <Icon size={14} className={isActive && (safeStatus === 'Preparing' || safeStatus === 'Kitchen') ? 'animate-spin-slow' : ''} />
                 </div>
                 <span className={`text-[10px] font-black mt-1.5 transition-colors duration-300 ${
                   isFullyDelivered 
-                    ? 'text-neutral-400 font-medium' 
+                    ? 'text-neutral-400 font-bold' 
                     : isDone ? 'text-orange-600' : 'text-gray-400'
                 }`}>
                   {stage.label}
@@ -203,8 +241,10 @@ const UserOrderPage = ({ currentUser }) => {
               {idx < stages.length - 1 && (
                 <div className="flex-1 h-1 mx-2 rounded-full bg-gray-100 overflow-hidden relative -mt-3">
                   <div 
-                    className="absolute top-0 left-0 bottom-0 bg-orange-500 transition-all duration-700"
-                    style={{ width: !isFullyDelivered && isDone && idx < currentIdx ? '100%' : '0%' }}
+                    className={`absolute top-0 left-0 bottom-0 transition-all duration-700 ${
+                      isFullyDelivered ? 'bg-neutral-300' : 'bg-orange-500'
+                    }`}
+                    style={{ width: isFullyDelivered || (isDone && idx < currentIdx) ? '100%' : '0%' }}
                   />
                 </div>
               )}
@@ -254,7 +294,7 @@ const UserOrderPage = ({ currentUser }) => {
                 </div>
 
                 <div className="p-5 space-y-8">
-                  {masterOrder.shopOrders.map((shopOrder) => {
+                  {masterOrder.shopOrders?.map((shopOrder) => {
                     const isSubOrderDelivered = ['Completed', 'Delivered'].includes(shopOrder.status);
 
                     return (
@@ -277,7 +317,7 @@ const UserOrderPage = ({ currentUser }) => {
                         {renderTrackingTimeline(shopOrder.status || 'Pending')}
 
                         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pl-2 mt-4">
-                          {shopOrder.shopOrderItems.map((itemObj, idx) => (
+                          {shopOrder.shopOrderItems?.map((itemObj, idx) => (
                             <div key={idx} className="flex gap-3 items-center bg-gray-50/50 p-2.5 rounded-xl border border-gray-100/50 justify-between">
                               <div className="flex gap-3 items-center">
                                 {itemObj.item?.image ? (

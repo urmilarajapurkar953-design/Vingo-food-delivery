@@ -135,7 +135,7 @@ export const verifyPaymentAndPlaceOrder = async (req, res) => {
 
     const unifiedOrder = new Order({
       user: userId, 
-      paymentMethod: paymentMethod || "Online", 
+      paymentMethod: "Online", // Safely falls within strict Mongoose backend schemas
       paymentStatus: "Paid", 
       razorpayOrderId: razorpay_order_id,
       razorpayPaymentId: razorpay_payment_id,
@@ -244,11 +244,15 @@ export const placeOrder = async (req, res) => {
 
     // 🛠️ Secure Server-Side override for total billing calculations
     const finalSanitizedTotal = calculateTotalWithDeliveryRules(overallCalculatedSubtotal);
+    const isCOD = checkIfCOD(paymentMethod);
+    
+    // Assign mapped structural short strings for MongoDB schema limits
+    const dbPaymentMethod = isCOD ? "COD" : "Online";
 
     const unifiedOrder = new Order({
       user: userId, 
-      paymentMethod,
-      paymentStatus: "Pending", 
+      paymentMethod: dbPaymentMethod, 
+      paymentStatus: isCOD ? "Pending" : "Paid", 
       deliveryAddress: { text: deliveryAddress.text, lat: Number(lat), lon: Number(lon) },
       shopOrders: shopOrdersPayload, 
       items: items.map(item => ({ product: item.product, quantity: item.quantity })), 
@@ -272,8 +276,8 @@ export const placeOrder = async (req, res) => {
             subOrderId: subOrder._id,
             customer: fullyPopulatedOrder.user,
             deliveryAddress: fullyPopulatedOrder.deliveryAddress,
-            paymentMethod: "Cash on Delivery", 
-            paymentStatus: "Pending",     
+            paymentMethod: isCOD ? "Cash on Delivery" : "Online Payment", 
+            paymentStatus: isCOD ? "Pending" : "Paid",            
             status: subOrder.status || "Pending",
             shop: subOrder.shop,
             items: subOrder.shopOrderItems,
@@ -405,18 +409,39 @@ export const updateSubOrderStatus = async (req, res) => {
     if (!subOrder) return res.status(404).json({ success: false, message: "Sub-order details not found." });
 
     const activeShop = await Shop.findById(subOrder.shop);
-    const io = req.app.get("io");
 
+    // ========================================================
+    // 📡 FIXED REAL-TIME BROADCAST FOR INTERMEDIATE STATUSES
+    // ========================================================
+    const io = req.app.get("io");
     if (io) {
-      io.to(updatedMasterOrder.user._id.toString()).emit("orderStatusUpdated", {
-        masterOrderId: updatedMasterOrder._id.toString(),
-        subOrderId: subOrderId.toString(),
-        newStatus: status,
-        deliveryBoy: null,
-        paymentMethod: updatedMasterOrder.paymentMethod || "Online" 
-      });
+      const customerIdStr = updatedMasterOrder.user?._id?.toString() || updatedMasterOrder.user?.toString();
+      
+      if (customerIdStr) {
+        const isCOD = checkIfCOD(updatedMasterOrder.paymentMethod);
+        const resolvedMethod = isCOD ? "Cash on Delivery" : "Online Payment";
+
+        const socketPayload = {
+          masterOrderId: updatedMasterOrder._id.toString(),
+          subOrderId: subOrderId.toString(),
+          status: status,       
+          newStatus: status,    
+          orderStatus: status,  
+          deliveryBoy: subOrder.deliveryBoy || null, 
+          paymentMethod: resolvedMethod
+        };
+
+        // Emit to both potential room strings to eliminate namespace problems
+        io.to(customerIdStr).emit("orderStatusUpdated", socketPayload);
+        io.to(subOrderId.toString()).emit("orderStatusUpdated", socketPayload);
+
+        console.log(`📡 [OWNER LIVE EVENT] Broadcasted '${status}' status to User Channel: ${customerIdStr}`);
+      }
     }
 
+    // ========================================================
+    // 🚏 DRIVER DISPATCH MANAGEMENT SYSTEM (Out for Delivery)
+    // ========================================================
     if (status === "Out for Delivery") {
       const nearbyDrivers = await User.find({ role: { $in: [/^delivery$/i, /^deliveryboy$/i] } });
 
@@ -432,7 +457,6 @@ export const updateSubOrderStatus = async (req, res) => {
         });
         await newAssignment.save();
 
-        // 🛠️ Dynamic Calculation check applied here
         const totalWithDelivery = calculateTotalWithDeliveryRules(subOrder.subTotal);
         const isCOD = checkIfCOD(updatedMasterOrder.paymentMethod);
         const collectionInstruction = isCOD 
@@ -459,6 +483,7 @@ export const updateSubOrderStatus = async (req, res) => {
 
     return res.status(200).json({ success: true, message: "Status updated successfully!", status: status });
   } catch (error) {
+    console.error("Error in updateSubOrderStatus:", error);
     return res.status(500).json({ success: false, message: error.message });
   }
 };
