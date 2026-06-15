@@ -10,27 +10,25 @@ const DeliveryHistory = () => {
   const [totalEarnings, setTotalEarnings] = useState(0);
   const [totalDeliveries, setTotalDeliveries] = useState(0);
 
-  useEffect(() => {
+useEffect(() => {
     const fetchHistory = async () => {
       try {
         const res = await axios.get(`${serverUrl}/api/orders/rider-history`, { withCredentials: true });
         if (res.data.success) {
+          const deliveriesCount = res.data.history.length;
+          setTotalDeliveries(deliveriesCount);
+          setTotalEarnings(deliveriesCount * 80);
           groupDataByDate(res.data.history);
-          
-          // Calculate overall life-time revenue metrics
-          const earningsSum = res.data.history.reduce((acc, curr) => acc + curr.amount, 0);
-          setTotalEarnings(earningsSum);
-          setTotalDeliveries(res.data.history.length);
         }
       } catch (err) {
         console.error("Failed to load historical rider logs:", err);
       } finally {
-        setLoading(false);
+        // ✅ CHANGE THIS LINE FROM loading(false) TO setLoading(false)
+        setLoading(false); 
       }
     };
     fetchHistory();
   }, []);
-
   const groupDataByDate = (data) => {
     const groups = {};
     
@@ -56,12 +54,13 @@ const DeliveryHistory = () => {
           label: bucketLabel,
           dateKey: orderDateStr,
           orders: [],
-          dailyEarnings: 0
+          dailyEarnings: 0 // Will accumulate ₹80 per order in this bucket
         };
       }
       
       groups[bucketLabel].orders.push(order);
-      groups[bucketLabel].dailyEarnings += order.amount;
+      // 💰 Increment daily payout by ₹80 for this order assignment
+      groups[bucketLabel].dailyEarnings += 80;
     });
 
     setHistoryGroups(groups);
@@ -83,7 +82,7 @@ const DeliveryHistory = () => {
           </span>
         </div>
         <div className="bg-white p-5 rounded-2xl border border-gray-100 shadow-sm flex flex-col justify-center">
-          <span className="text-xs text-gray-400 font-bold uppercase tracking-wider">Total Order Volume Handled</span>
+          <span className="text-xs text-gray-400 font-bold uppercase tracking-wider">Total Payout Earnings</span>
           <span className="text-2xl md:text-3xl font-black text-[#ff4d2d] mt-1">
             ₹{totalEarnings.toLocaleString('en-IN')}
           </span>
@@ -103,14 +102,14 @@ const DeliveryHistory = () => {
           {Object.values(historyGroups).map((group, gIdx) => (
             <div key={gIdx} className="space-y-3">
               
-              {/* Chronological Header Row containing Daily Automated Summary Aggregate details */}
+              {/* Chronological Header Row */}
               <div className="flex justify-between items-end bg-gray-100/70 p-3 rounded-xl border border-gray-200/40">
                 <span className="text-sm font-black text-gray-700 flex items-center gap-2">
                   <span className="w-2 h-2 rounded-full bg-[#ff4d2d]" />
                   {group.label} {group.label !== "Today" && group.label !== "Yesterday" ? "" : `(${group.dateKey})`}
                 </span>
                 <span className="text-xs font-bold text-gray-500">
-                  Total Managed Cashflow: <strong className="text-gray-800 text-sm font-black">₹{group.dailyEarnings.toLocaleString('en-IN')}</strong>
+                  Daily Payout: <strong className="text-gray-800 text-sm font-black">₹{group.dailyEarnings.toLocaleString('en-IN')}</strong>
                 </span>
               </div>
 
@@ -137,7 +136,7 @@ const DeliveryHistory = () => {
                           </div>
                         </div>
 
-                        {/* Timestamp badge formatting details */}
+                        {/* Timestamp badge */}
                         <div className="text-right flex flex-col items-end">
                           <span className="text-[11px] font-bold text-gray-500 bg-gray-50 px-2 py-0.5 rounded border border-gray-100 flex items-center gap-1">
                             <FaClock size={10} className="text-gray-400" /> {formattedTime}
@@ -167,11 +166,14 @@ const DeliveryHistory = () => {
                           isCOD ? 'bg-amber-50 text-amber-700 border-amber-200/70' : 'bg-green-50 text-green-700 border-green-200/70'
                         }`}>
                           {isCOD ? <FaMoneyBillWave size={12} /> : <FaCreditCard size={12} />}
-                          {isCOD ? "Cash On Delivery" : "Online Prepaid"}
+                          {isCOD ? "Collect Cash on Delivery" : "Online Prepaid"}
                         </span>
 
-                        <div className="text-xs text-gray-500 font-bold">
-                          Subtotal value: <span className="text-base font-black text-gray-800 ml-1">₹{order.amount}</span>
+                        <div className="text-xs text-gray-400 font-bold flex flex-col items-end gap-0.5">
+                          <div>Food Bill Amount: <span className="font-bold text-gray-700">₹{order.amount}</span></div>
+                          <div className="text-xs text-gray-500 font-bold">
+                            Your Delivery Fee: <span className="text-base font-black text-emerald-600 ml-1">₹80</span>
+                          </div>
                         </div>
                       </div>
 

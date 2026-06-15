@@ -5,7 +5,7 @@ import { useNavigate } from 'react-router-dom';
 import { FaUtensils, FaPen, FaPlus } from "react-icons/fa"; 
 import OwnerItemCard from './OwnerItemCard';
 
-function OwnerDashboard() {
+function OwnerDashboard() { 
   const { myShopData, loading } = useSelector((state) => state.owner);
   const navigate = useNavigate();
 
