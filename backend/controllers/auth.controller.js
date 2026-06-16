@@ -1,7 +1,7 @@
 import User from "../models/user.model.js";
 import bcrypt from "bcryptjs";
 import genToken from "../utils/genToken.js";
-import {sendOtpMail} from "../utils/Mail.js";
+import {sendOtpMail} from "../utils/mail.js";
 
 
 export const signUp = async (req, res) => {
