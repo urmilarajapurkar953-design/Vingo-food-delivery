@@ -26,7 +26,7 @@
   import SearchPage from './components/SearchPage';
   import DeliveryHistory from './pages/DeliveryHistory';
 
-  export const serverUrl = 'http://localhost:8000';
+  export const serverUrl = "https://vingo-food-delivery-backend-tbhw.onrender.com";
 
   function App() {
     const location = useLocation();
