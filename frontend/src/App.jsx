@@ -3,7 +3,7 @@
   import { Toaster } from 'react-hot-toast';
   import SignUp from './pages/signUp';
   import SignIn from './pages/signIn';
-  import ForgotPassword from './pages/forgotPassword';
+  import ForgotPassword from './pages/ForgotPassword';
   import Home from './pages/Home';
   import Nav from './components/Nav';
   import useGetCurrentUser from './hooks/useGetCurrentUser';
