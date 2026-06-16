@@ -1,6 +1,6 @@
 import Shop from "../models/shop.model.js";
 import uploadOnCloudinary from "../utils/cloudinary.js";
-import Item from "../models/Item.model.js";
+import Item from "../models/item.model.js";
 import fs from "fs";
 
 // 1. GET ALL SHOPS (Crucial for UserDashboard)
