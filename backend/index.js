@@ -13,40 +13,50 @@ import shopRouter from "./routes/shop.routes.js";
 import itemRouter from "./routes/item.routes.js";
 import orderRouter from "./routes/order.routes.js"; 
 import deliveryRouter from "./routes/delivery.routes.js";
-import paymentRouter from "./routes/payment.routes.js"; // 🌟 ADD THIS LINE
+import paymentRouter from "./routes/payment.routes.js"; 
 
 const app = express();
 
+const allowedOrigins = [
+    "http://localhost:5173",
+    "https://vingo-food-delivery-yi6q.onrender.com"
+];
+
+const corsOptions = {
+    origin: function (origin, callback) {
+        if (!origin) return callback(null, true);
+        if (allowedOrigins.indexOf(origin) === -1) {
+            const msg = 'The CORS policy for this site does not allow access from the specified Origin.';
+            return callback(new Error(msg), false);
+        }
+        return callback(null, true);
+    },
+    credentials: true,
+    methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"]
+};
+
 const server = http.createServer(app);
 const io = new Server(server, {
-    cors: {
-        origin: "https://vingo-food-delivery-yi6q.onrender.com",
-        credentials: true,
-        methods: ["GET", "POST", "PUT"]
-    }
+    cors: corsOptions 
 });
 
-// Attaches the socket instance to Express so your controllers can call: req.app.get("io")
 app.set("io", io);
 
 io.on("connection", (socket) => {
     console.log(`🔌 New WebSocket client handshake established: ${socket.id}`);
 
-    // STANDARDIZED: Handles both users and owners checking into their secure ID channel spaces
     socket.on("joinRoom", (id) => {
         if (!id) return console.log("⚠️ Warning: Received an empty ID on joinRoom");
         socket.join(id.toString());
         console.log(`🎯 Socket entity registered inside channel: ${id}`);
     });
     
-    // Kept fallback for old reference if components trigger it
     socket.on("joinUserRoom", (userId) => {
         if (!userId) return console.log("⚠️ Warning: Received an empty userId on joinUserRoom");
         socket.join(userId.toString());
         console.log(`👤 User registered inside real-time notification room: ${userId}`);
     });
 
-    // 🛵 NEW: Registers delivery boys into a global broadcast channel for incoming dispatch alerts
     socket.on("joinDeliveryRoom", () => {
         socket.join("delivery_drivers_room");
         console.log(`🛵 Delivery Boy registered to live geo-radar broadcast channel.`);
@@ -56,15 +66,11 @@ io.on("connection", (socket) => {
         console.log(`❌ Client disconnected from streaming room socket: ${socket.id}`);
     });
 });
-// Middleware
-app.use(cors({
-    origin: "https://vingo-food-delivery-yi6q.onrender.com",
-    credentials: true,
-}));
+
+app.use(cors(corsOptions)); 
 app.use(express.json());
 app.use(cookieParser());
 
-// Routes
 app.use("/api/auth", authRouter);
 app.use("/api/user", userRouter);
 app.use("/api/item", itemRouter);
