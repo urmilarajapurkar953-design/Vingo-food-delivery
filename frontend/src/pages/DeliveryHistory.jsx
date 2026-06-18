@@ -23,7 +23,6 @@ useEffect(() => {
       } catch (err) {
         console.error("Failed to load historical rider logs:", err);
       } finally {
-        // ✅ CHANGE THIS LINE FROM loading(false) TO setLoading(false)
         setLoading(false); 
       }
     };
@@ -32,7 +31,6 @@ useEffect(() => {
   const groupDataByDate = (data) => {
     const groups = {};
     
-    // Get calendar markers for Today and Yesterday
     const todayStr = new Date().toLocaleDateString('en-IN');
     const yesterday = new Date();
     yesterday.setDate(yesterday.getDate() - 1);
@@ -54,12 +52,11 @@ useEffect(() => {
           label: bucketLabel,
           dateKey: orderDateStr,
           orders: [],
-          dailyEarnings: 0 // Will accumulate ₹80 per order in this bucket
+          dailyEarnings: 0 
         };
       }
       
       groups[bucketLabel].orders.push(order);
-      // 💰 Increment daily payout by ₹80 for this order assignment
       groups[bucketLabel].dailyEarnings += 80;
     });
 
@@ -102,7 +99,6 @@ useEffect(() => {
           {Object.values(historyGroups).map((group, gIdx) => (
             <div key={gIdx} className="space-y-3">
               
-              {/* Chronological Header Row */}
               <div className="flex justify-between items-end bg-gray-100/70 p-3 rounded-xl border border-gray-200/40">
                 <span className="text-sm font-black text-gray-700 flex items-center gap-2">
                   <span className="w-2 h-2 rounded-full bg-[#ff4d2d]" />
@@ -113,7 +109,6 @@ useEffect(() => {
                 </span>
               </div>
 
-              {/* Order Cards loop inside current specific date group */}
               <div className="space-y-4">
                 {group.orders.map((order, oIdx) => {
                   const isCOD = order.paymentMethod?.toUpperCase() === 'COD' || order.paymentMethod?.toLowerCase().includes('cash');
@@ -122,7 +117,6 @@ useEffect(() => {
                   return (
                     <div key={oIdx} className="bg-white rounded-2xl border border-gray-100 p-5 shadow-sm space-y-4">
                       
-                      {/* Top Shop Line */}
                       <div className="flex justify-between items-start gap-4">
                         <div className="flex items-center gap-2.5">
                           {order.shopImage ? (
@@ -136,7 +130,6 @@ useEffect(() => {
                           </div>
                         </div>
 
-                        {/* Timestamp badge */}
                         <div className="text-right flex flex-col items-end">
                           <span className="text-[11px] font-bold text-gray-500 bg-gray-50 px-2 py-0.5 rounded border border-gray-100 flex items-center gap-1">
                             <FaClock size={10} className="text-gray-400" /> {formattedTime}
@@ -144,7 +137,6 @@ useEffect(() => {
                         </div>
                       </div>
 
-                      {/* Menu Item Breakdowns Tray */}
                       <div className="bg-neutral-50/50 rounded-xl p-3 border border-neutral-100/50 space-y-1.5">
                         {order.items.map((item, iIdx) => (
                           <div key={iIdx} className="flex justify-between text-xs text-gray-600">
@@ -154,13 +146,11 @@ useEffect(() => {
                         ))}
                       </div>
 
-                      {/* Dropoff location details block */}
                       <div className="text-xs text-gray-500 flex items-start gap-1.5 bg-gray-50/30 p-2 rounded-lg truncate">
                         <FaMapMarkerAlt className="text-gray-400 shrink-0 mt-0.5" size={12} />
                         <span>Dropoff: <strong className="text-gray-700 font-medium">{order.deliveryAddress}</strong></span>
                       </div>
 
-                      {/* Bottom Balance Strip */}
                       <div className="flex justify-between items-center pt-2 border-t border-dashed border-gray-100">
                         <span className={`flex items-center gap-1.5 px-2.5 py-1 rounded-xl text-[10px] font-black border uppercase tracking-wider ${
                           isCOD ? 'bg-amber-50 text-amber-700 border-amber-200/70' : 'bg-green-50 text-green-700 border-green-200/70'
