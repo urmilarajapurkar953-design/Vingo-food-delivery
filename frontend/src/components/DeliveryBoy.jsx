@@ -12,7 +12,6 @@ const DeliveryBoy = () => {
   const { socket } = useSocket();
   const [availableJobs, setAvailableJobs] = useState([]);
   
-  // 🌟 PERSISTENCE STEP 1: Initialize activeDelivery state directly from localStorage fallback if available
   const [activeDelivery, setActiveDelivery] = useState(() => {
     const savedRun = localStorage.getItem('current_active_delivery_run');
     return savedRun ? JSON.parse(savedRun) : null;
@@ -21,7 +20,6 @@ const DeliveryBoy = () => {
   const [loadingId, setLoadingId] = useState(null);
   const [completing, setCompleting] = useState(false); 
 
-  // 🔒 SECURE DOORSTEP OTP FLOW STATE FIELDS
   const [showOtpModal, setShowOtpModal] = useState(false);
   const [otpInput, setOtpInput] = useState('');
   const [resending, setResending] = useState(false);
@@ -29,31 +27,25 @@ const DeliveryBoy = () => {
   const { userData, loading } = useSelector((state) => state.user || {});
   const driverId = userData?._id;
 
-  // FIXED ARRANGEMENT VALUE CONFIGURATION FOR EARNINGS
   const DELIVERY_FEE_PAYOUT = 80;
 
-  // 🌟 DYNAMIC ORDER VALUE + APP PLATFORM FEES CALCULATION UTILITY
   const calculateTotalOrderValue = (orderObj) => {
     if (!orderObj) return 0;
     
-    // Fallback extraction tree for basic amount
     const baseValue = orderObj.totalAmount || orderObj.subTotal || orderObj.orderValue || orderObj.total || orderObj.amount || 0;
     
-    // If order price is less than 500, apply the 40 rupees app fee
     if (baseValue > 0 && baseValue < 500) {
       return baseValue + 40;
     }
     return baseValue;
   };
 
-  // 🌟 ROBUST CASE-INSENSITIVE PAYMENT METHOD CHECKER
   const checkIfCOD = (paymentMethodString) => {
     if (!paymentMethodString) return false;
     const normalized = paymentMethodString.toLowerCase();
     return normalized.includes('cod') || normalized.includes('cash');
   };
 
-  // 🌟 PERSISTENCE STEP 2: Sync activeDelivery to localStorage whenever it changes
   useEffect(() => {
     if (activeDelivery) {
       localStorage.setItem('current_active_delivery_run', JSON.stringify(activeDelivery));
@@ -62,12 +54,10 @@ const DeliveryBoy = () => {
     }
   }, [activeDelivery]);
 
-  // 🌟 PERSISTENCE STEP 3: Query the backend on mount/refresh to find any already accepted runs
   useEffect(() => {
     const fetchExistingJobs = async () => {
       if (!driverId) return;
       try {
-        // Fetch available job feeds
         const response = await axiosClient.get(`${serverUrl}/api/delivery/available-jobs`, { withCredentials: true });
         if (response.data.success) {
           setAvailableJobs(response.data.jobs || []);
@@ -113,9 +103,7 @@ const DeliveryBoy = () => {
     };
   }, [socket]);
 
-  // =========================================================================
-  // ⚡ BACKGROUND GPS SENSOR: STREAMS TELEMETRY COORDINATES TO THE CUSTOMER
-  // =========================================================================
+
   useEffect(() => {
     if (!activeDelivery) return;
 
@@ -283,7 +271,6 @@ const DeliveryBoy = () => {
     <div className="min-h-screen bg-gray-50 mt-[80px] pt-6 px-4 md:px-8 pb-12">
       <div className="max-w-6xl mx-auto grid grid-cols-1 lg:grid-cols-3 gap-8">
         
-        {/* --- LEFT / MIDDLE COLUMN: FEED --- */}
         <div className="lg:col-span-2 flex flex-col gap-6">
           <div className="flex items-center justify-between border-b border-gray-200 pb-4">
             <div>
@@ -318,10 +305,8 @@ const DeliveryBoy = () => {
               {availableJobs.map((job, index) => {
                 const uniqueKeyId = job.subOrderId || job.assignmentId || job._id || `offer-card-${index}`;
                 
-                // 🌟 FIX: Implemented Case-Insensitive Payment Matching Check
                 const isJobCOD = checkIfCOD(job.paymentMethod);
                 
-                // 🌟 FIX: Compute base order values with automated platform fee logic appended
                 const totalFoodValueWithFees = calculateTotalOrderValue(job);
 
                 return (
@@ -363,7 +348,6 @@ const DeliveryBoy = () => {
                           <FaCoins className="text-emerald-500 text-lg" /> ₹{DELIVERY_FEE_PAYOUT}
                         </div>
 
-                        {/* 🌟 APPLIED PLATFORM SURCHARGE CALCULATION REFLECTION */}
                         <div className="text-[11px] text-gray-400 mt-1 block md:text-center">
                           Total Amount: <span className="font-bold text-gray-600">₹{totalFoodValueWithFees}</span>
                         </div>
@@ -401,7 +385,6 @@ const DeliveryBoy = () => {
           )}
         </div>
 
-        {/* --- RIGHT COLUMN: ACTIVE RUN WORKSPACE --- */}
         <div className="lg:col-span-1">
           <div className="bg-white rounded-2xl border border-gray-100 p-6 shadow-sm sticky top-[104px]">
             <h2 className="text-lg font-bold text-gray-800 border-b border-gray-100 pb-3 flex items-center gap-2">
@@ -422,10 +405,8 @@ const DeliveryBoy = () => {
                   </div>
                 </div>
 
-                {/* RESTRUCTURED FINANCIAL ACCOUNTING BLOCK */}
                 <div className="bg-gray-50 border border-gray-200 rounded-2xl p-4 space-y-3 shadow-inner">
                   
-                  {/* Payout Metric Row */}
                   <div className="flex justify-between items-center bg-emerald-50 border border-emerald-100 p-2.5 rounded-xl">
                     <span className="text-xs font-bold text-emerald-800 flex items-center gap-1">
                       <FaCoins className="text-emerald-600" /> Your Clear Payout:
@@ -435,7 +416,6 @@ const DeliveryBoy = () => {
 
                   <div className="border-t border-dashed border-gray-200 my-1"></div>
 
-                  {/* 🌟 FIX: Applied case-insensitive checker and dynamic total logic to active container card layout */}
                   {(() => {
                     const isActiveCOD = checkIfCOD(activeDelivery.paymentMethod);
                     const activeTotalWithFees = calculateTotalOrderValue(activeDelivery);
@@ -521,9 +501,7 @@ const DeliveryBoy = () => {
 
       </div>
 
-      {/* =========================================================================
-      // 🔒 SECURE INTERACTIVE DOORSTEP OTP OVERLAY SHEET MODAL LAYER
-      // ========================================================================= */}
+
       {showOtpModal && (
         <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-fade-in">
           <div className="bg-white rounded-[2rem] max-w-md w-full p-6 md:p-8 text-center shadow-2xl relative border border-gray-50">
