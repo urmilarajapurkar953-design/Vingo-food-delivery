@@ -9,10 +9,8 @@ function OwnerDashboard() {
   const { myShopData, loading } = useSelector((state) => state.owner);
   const navigate = useNavigate();
 
-  // Robust check: Does the object exist and have a valid ID?
   const shopExists = !!(myShopData && (myShopData._id || myShopData.id));
 
-  // FALLBACK: Prevent blank screen/flicker during data fetch or Redux update
   if (loading) {
     return (
       <div className='w-full h-screen flex flex-col items-center justify-center bg-[#fff9f6]'>
@@ -72,7 +70,6 @@ function OwnerDashboard() {
             </div>
           </div>
 
-          {/* MENU SECTION */}
           <div className='w-full max-w-3xl mt-4'>
             <div className='flex justify-between items-center mb-6'>
               <h3 className="text-xl font-bold text-gray-800">Your Menu</h3>
