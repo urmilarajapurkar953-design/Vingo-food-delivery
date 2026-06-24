@@ -2,28 +2,24 @@ import React from 'react';
 import { FaPen, FaTrash } from 'react-icons/fa';
 import { useDispatch } from 'react-redux';
 import { useNavigate } from 'react-router-dom';
-import axios from 'axios'; // FIXED: Added missing import
+import axios from 'axios'; 
 import { setMyShopData } from '../redux/ownerSlice';
-import { serverUrl } from '../main'; // FIXED: Added missing import
-import { toast } from 'react-hot-toast'; // Added for feedback
-
+import { serverUrl } from '../main'; 
+import { toast } from 'react-hot-toast'; 
 const OwnerItemCard = (props) => {
     const itemData = props.data || props.item || props;
     const navigate = useNavigate();
     const dispatch = useDispatch();
 
     const handleDelete = async () => {
-        // FIXED: Added a confirmation so you don't delete by mistake
         if (!window.confirm("Are you sure you want to delete this item?")) return;
 
         const toastId = toast.loading("Deleting item...");
         try {
-            // FIXED: Changed Data._id to itemData._id
             const result = await axios.get(`${serverUrl}/api/item/delete/${itemData._id}`, { 
                 withCredentials: true 
             });
 
-            // FIXED: Your backend now returns the full shop object, update Redux
             dispatch(setMyShopData(result.data.shop || result.data));
             toast.success("Item deleted successfully", { id: toastId });
             
@@ -42,7 +38,6 @@ const OwnerItemCard = (props) => {
     return (
         <div className='w-full max-w-3xl bg-white shadow-sm rounded-2xl overflow-hidden border-2 border-transparent flex items-center p-3 sm:p-4 hover:border-[#ff4d2d] hover:shadow-xl hover:-translate-y-1 transition-all duration-300 mb-4 cursor-default group'>
             
-            {/* Left Side: Image */}
             <div className='w-24 h-24 sm:w-32 sm:h-32 flex-shrink-0 rounded-xl overflow-hidden border border-gray-100 shadow-inner'>
                 <img 
                     src={image} 
@@ -51,7 +46,6 @@ const OwnerItemCard = (props) => {
                 />
             </div>
 
-            {/* Right Side: Content */}
             <div className='ml-4 sm:ml-6 flex-grow flex flex-col justify-between self-stretch'>
                 <div>
                     <div className='flex justify-between items-start'>
@@ -92,7 +86,7 @@ const OwnerItemCard = (props) => {
                         <button 
                             className='p-2 rounded-full bg-gray-50 text-gray-400 hover:bg-red-50 hover:text-[#ff4d2d] transition-all shadow-sm'
                             title="Delete Item"
-                            onClick={handleDelete} // FIXED: Removed unnecessary parameter
+                            onClick={handleDelete} 
                         >
                             <FaTrash size={14} />
                         </button>
