@@ -8,13 +8,16 @@ import { auth } from '../../firebase';
 import { useDispatch } from 'react-redux';
 import { setUserData } from '../redux/user.Slice';
 
+const API_BASE_URL = window.location.hostname === "localhost" 
+  ? "http://localhost:8000" 
+  : "https://vingo-food-delivery-backend-tbhw.onrender.com";
+
 function SignUp() {
-  const serverUrl = "http://localhost:8000";
   const primaryColor = "#ff4d2d";
   const bgColor = "#fff9f6";
   const borderColor = "#ddd";
 
-  const [role, setRole] = useState("user"); // "user" is colored by default
+  const [role, setRole] = useState("user"); 
   const navigate = useNavigate();
   const [fullName, setFullName] = useState("");
   const [email, setEmail] = useState("");
@@ -30,7 +33,7 @@ function SignUp() {
     setLoading(true);
     const loadingToast = toast.loading("Creating account...");
     try {
-      const result = await axios.post(`${serverUrl}/api/auth/signup`, {
+      const result = await axios.post(`${API_BASE_URL}/api/auth/signup`, {
         fullName, email, mobile, password, role
       }, { withCredentials: true });
       dispatch(setUserData(result.data));
@@ -50,7 +53,9 @@ function SignUp() {
     try {
       const provider = new GoogleAuthProvider();
       const result = await signInWithPopup(auth, provider);
-      const response = await axios.post(`${serverUrl}/api/auth/google-auth`, {
+      
+      // 🔄 Pointing to our dynamic API base URL
+      const response = await axios.post(`${API_BASE_URL}/api/auth/google-auth`, {
         fullName: result.user.displayName,
         email: result.user.email,
         mobile: mobile,
@@ -92,13 +97,14 @@ function SignUp() {
           </div>
         </div>
 
-        {/* --- CUSTOM ROLE SELECTION (Matches Reference Image) --- */}
+        {/* --- CUSTOM ROLE SELECTION --- */}
         <div className='mb-8'>
           <label className='block text-gray-500 text-sm font-bold mb-3 uppercase tracking-wide'>Role</label>
           <div className='flex items-center gap-3'>
             {['user', 'owner', 'deliveryBoy'].map((item) => (
               <button
                 key={item}
+                type="button"
                 onClick={() => setRole(item)}
                 className={`flex-1 py-2 px-1 rounded-lg text-sm font-bold transition-all duration-200 border-2 ${
                   role === item 
