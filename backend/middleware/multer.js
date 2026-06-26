@@ -1,8 +1,11 @@
 import multer from 'multer';
+import os from 'os';
+import path from 'path';
 
 const storage = multer.diskStorage({
     destination: function (req, file, cb) {
-        cb(null, './public');
+        // 🌐 FIX: Uses the OS temp directory ('/tmp' on Render), which has write permissions
+        cb(null, os.tmpdir());
     },
     filename: function (req, file, cb) {
         cb(null, Date.now() + '-' + file.originalname);
