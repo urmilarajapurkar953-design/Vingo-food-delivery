@@ -6,12 +6,15 @@ import { BrowserRouter } from 'react-router-dom'
 import { Provider } from 'react-redux'
 import { store } from './redux/store.js'
 
-export const serverUrl = "http://localhost:8000";
+// 🌐 DYNAMIC FIX: Automatically uses Render url when live, and localhost when developing
+export const serverUrl = window.location.hostname === "localhost" 
+  ? "http://localhost:8000" 
+  : "https://vingo-food-delivery-backend-tbhw.onrender.com";
 
 createRoot(document.getElementById('root')).render(
   <BrowserRouter>
-  <Provider store={store}>
-<App />
-  </Provider>
+    <Provider store={store}>
+      <App />
+    </Provider>
   </BrowserRouter>
 )
