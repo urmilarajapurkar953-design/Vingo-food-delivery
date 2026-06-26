@@ -32,7 +32,12 @@ export const SocketProvider = ({ children }) => {
       return;
     }
 
-    const newSocket = io('http://localhost:8000');
+    // 🌐 DYNAMIC FIX: Checks if you're local or in production
+    const SOCKET_URL = window.location.hostname === "localhost" 
+      ? "http://localhost:8000" 
+      : "https://vingo-food-delivery-backend-tbhw.onrender.com";
+
+    const newSocket = io(SOCKET_URL);
     setSocket(newSocket);
 
     // Join respective channels instantly on login/mount
