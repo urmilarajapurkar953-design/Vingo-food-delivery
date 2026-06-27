@@ -22,7 +22,6 @@ function SearchPage() {
     return item ? item.quantity : 0;
   };
 
-  // Fetch items based on city area location context
   useEffect(() => {
     const fetchItems = async () => {
       if (!currentCity) return;
@@ -41,7 +40,6 @@ function SearchPage() {
     fetchItems();
   }, [currentCity]);
 
-  // Client-side filtering matching search terms natively
   const filteredItems = suggestedItems.filter(item => 
     item.name?.toLowerCase().includes(searchQuery) || 
     item.category?.toLowerCase().includes(searchQuery) ||
@@ -52,7 +50,6 @@ function SearchPage() {
     <div className='w-full min-h-screen bg-[#fff9f6] pt-24 px-4 pb-20 flex flex-col items-center'>
       <div className="w-full max-w-6xl">
         
-        {/* BACK NAVIGATION BAR */}
         <div className="flex items-center gap-4 mb-8">
           <button 
             onClick={() => navigate('/')} 
@@ -70,7 +67,6 @@ function SearchPage() {
           </div>
         </div>
 
-        {/* RESULTS GRID */}
         <div className='grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6'>
           {loading ? (
             <p className="col-span-full text-center py-12 italic text-gray-400">Searching menus...</p>
