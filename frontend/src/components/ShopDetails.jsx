@@ -26,12 +26,10 @@ function ShopDetails() {
     const fetchShopAndItems = async () => {
       setLoading(true);
       try {
-        // 1. Fetch Single Shop Metadata details (Using your existing endpoint framework structure)
         const shopRes = await axios.get(`${serverUrl}/api/v1/shops/all`);
         const currentShop = shopRes.data?.find(s => s._id === shopId);
         setShop(currentShop);
 
-        // 2. Fetch specific items linked to this unique partner vendor shop ID
         const itemsRes = await axios.get(`${serverUrl}/api/item/city-items`);
         const filtered = Array.isArray(itemsRes.data) 
           ? itemsRes.data.filter(item => item.shop?._id === shopId || item.shop === shopId)
@@ -69,7 +67,6 @@ function ShopDetails() {
     <div className="w-full min-h-screen bg-[#fff9f6] pb-20 px-4 pt-24 flex flex-col items-center">
       <div className="w-full max-w-5xl flex flex-col gap-8">
         
-        {/* BACK ACTION & HERO BRANDING ROW CONTAINER */}
         <div className="w-full">
           <button 
             onClick={() => navigate(-1)} 
@@ -78,7 +75,6 @@ function ShopDetails() {
             <FaChevronLeft /> Back to Dashboard
           </button>
 
-          {/* HERO BANNER SECTION DISPLAY */}
           <div className="relative h-64 md:h-80 w-full rounded-3xl overflow-hidden shadow-xl">
             <img src={shop.image} alt={shop.name} className="w-full h-full object-cover" />
             <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/30 to-transparent" />
@@ -97,7 +93,6 @@ function ShopDetails() {
           </div>
         </div>
 
-        {/* RESTAURANT FOOD MENU ITEMS CONTENT GRID LIST */}
         <div className="w-full">
           <h2 className="text-gray-800 text-2xl font-black mb-6 flex items-center gap-2">
             <FaUtensils className="text-[#ff4d2d]" /> Full Restaurant Menu
