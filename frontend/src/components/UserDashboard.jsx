@@ -8,7 +8,6 @@ import { serverUrl } from '../App';
 import { addToCart, decrementQuantity } from '../redux/user.Slice.js'; 
 import { useNavigate, useSearchParams } from 'react-router-dom';
 
-// 🌟 SKELETON LOADERS FOR SMOOTH TRANSITIONS
 const ShopSkeleton = () => (
   <div className="animate-pulse flex flex-col w-full">
     <div className="h-52 md:h-60 bg-gray-200 rounded-3xl w-full"></div>
@@ -75,7 +74,6 @@ function UserDashboard() {
     scrollRef.current.scrollBy({ left: direction === 'left' ? -amount : amount, behavior: 'smooth' });
   };
 
-  // Fetch Shops
   useEffect(() => {
     const fetchShops = async () => {
       if (currentCity === null) return; 
@@ -97,7 +95,6 @@ function UserDashboard() {
     fetchShops();
   }, [currentCity]);
 
-  // Fetch Items
   useEffect(() => {
     const fetchItems = async () => {
       if (!currentCity) return;
@@ -130,7 +127,6 @@ function UserDashboard() {
 
   return (
     <div className='w-full flex flex-col items-center bg-[#fff9f6] pb-20 px-4 pt-11 -mt-10 relative z-10'>
-      {/* CATEGORY SLIDER */}
       <div className="w-full max-w-6xl">
         <div className="flex justify-between items-center mb-5">
           <h1 className='text-gray-800 text-2xl font-bold'>Inspiration for your first order</h1>
@@ -172,14 +168,12 @@ function UserDashboard() {
         </div>
       </div>
 
-      {/* SHOPS GRID */}
       <div className="w-full max-w-6xl mt-12">
         <h1 className='text-gray-800 text-2xl font-bold mb-6 capitalize'>
           {currentCity && currentCity !== "Unknown Location" ? `Best shops in ${currentCity}` : "Best shops near you"}
         </h1>
         <div className='grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-8'>
           {loading ? (
-            // 🌟 Render 3 elegant shimmer grid modules while loading
             <>
               <ShopSkeleton />
               <ShopSkeleton />
@@ -211,7 +205,6 @@ function UserDashboard() {
         </div>
       </div>
 
-      {/* SUGGESTED ITEMS GRID */}
       <div className="w-full max-w-6xl mt-12">
         <h1 className='text-gray-800 text-2xl font-bold mb-6 flex items-center gap-2'>
           {searchQuery 
@@ -221,7 +214,6 @@ function UserDashboard() {
         </h1>
         <div className='grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6'>
           {itemsLoading ? (
-            // 🌟 Render 4 item shimmers while waiting for backend response
             <>
               <ItemSkeleton />
               <ItemSkeleton />
