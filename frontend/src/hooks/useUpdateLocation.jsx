@@ -1,7 +1,7 @@
 import { useEffect } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
 import axios from 'axios';
-import { serverUrl } from '../App'; // Assuming serverUrl is imported from your App file
+import { serverUrl } from '../App';
 import { setAddress ,setLocation } from '../redux/mapSlice';
 
 
@@ -27,7 +27,7 @@ function useUpdateLocation() {
             updateLocation(pos.coords.latitude, pos.coords.longitude);
         });
 
-        // Cleanup watcher when component unmounts or userData changes
+       
         return () => {
             navigator.geolocation.clearWatch(watchId);
         };
