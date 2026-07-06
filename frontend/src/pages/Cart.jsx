@@ -9,17 +9,14 @@ const Cart = () => {
   const dispatch = useDispatch();
   const navigate = useNavigate();
 
-  // 🛠️ FIXED: Restored the missing navigation handler
   const handleCheckout = () => {
     navigate('/checkout');
   };
 
   const totalPrice = cartItem.reduce((acc, item) => acc + (item.price * item.quantity), 0);
   
-  // 🌟 DYNAMIC THRESHOLD RULE: Free delivery if order subtotal is >= 500
   const DELIVERY_FEE = totalPrice >= 500 ? 0 : 40;
   
-  // Calculate final total including delivery charges
   const finalTotal = totalPrice + DELIVERY_FEE;
 
   if (cartItem.length === 0) {
@@ -42,7 +39,6 @@ const Cart = () => {
         <h1 className="text-3xl font-black text-gray-800 mb-8">My Cart</h1>
         
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-          {/* List of Items */}
           <div className="lg:col-span-2 space-y-4">
             {cartItem.map((item) => (
               <div key={item._id} className="bg-white p-4 rounded-3xl flex items-center gap-4 shadow-sm border border-gray-100">
@@ -68,7 +64,6 @@ const Cart = () => {
               </div>
             ))}
 
-            {/* Visual Free Delivery Banner Hint */}
             {totalPrice < 500 && (
               <div className="bg-orange-50 border border-orange-100 p-4 rounded-2xl text-xs font-bold text-neutral-600">
                 💡 Add <span className="text-[#ff4d2d]">₹{500 - totalPrice}</span> more to unlock <span className="text-green-600 font-extrabold">FREE DELIVERY</span>!
@@ -76,7 +71,6 @@ const Cart = () => {
             )}
           </div>
 
-          {/* Order Summary */}
           <div className="bg-white p-6 rounded-3xl shadow-sm h-fit border border-gray-100">
             <h2 className="text-xl font-bold mb-4">Summary</h2>
             <div className="flex justify-between mb-2">
