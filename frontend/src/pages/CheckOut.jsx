@@ -6,11 +6,9 @@ import toast from 'react-hot-toast';
 import axios from 'axios';
 import 'leaflet/dist/leaflet.css';
 
-// Redux Actions
 import { clearCart } from '../redux/user.Slice'; 
 import { setLocation, setAddress } from '../redux/mapSlice';
 
-// Leaflet Imports
 import { MapContainer, TileLayer, Marker, useMap } from 'react-leaflet';
 import L from 'leaflet';
 
@@ -53,13 +51,11 @@ const CheckOut = () => {
     if (currentAddress) setDeliveryAddress(currentAddress);
   }, [currentAddress]);
 
-  // --- MULTI-SHOP DYNAMIC DELIVERY FEE CALCULATIONS WITH WAIVER ---
   const subtotal = cartItem.reduce((acc, item) => acc + item.price * item.quantity, 0);
   
   const uniqueShops = [...new Set(cartItem.map(item => item.shop || item.shopId).filter(Boolean))];
   const totalShopsCount = uniqueShops.length > 0 ? uniqueShops.length : 1;
   
-  // 🌟 DYNAMIC THRESHOLD RULE: If subtotal >= 500, delivery fee is dropped entirely
   const deliveryFee = subtotal >= 500 ? 0 : totalShopsCount * 40; 
   const total = subtotal + deliveryFee;
 
@@ -231,7 +227,6 @@ const CheckOut = () => {
       <div className="max-w-2xl mx-auto bg-white rounded-3xl shadow-sm border border-gray-100 p-6">
         <h1 className="text-2xl font-bold mb-6">Checkout</h1>
 
-        {/* Delivery Location Section */}
         <div className="mb-8">
           <div className="flex items-center gap-2 text-gray-800 font-bold mb-3">
             <FaMapMarkerAlt className="text-orange-500" />
@@ -291,7 +286,6 @@ const CheckOut = () => {
           </div>
         </div>
 
-        {/* Payment Method Section */}
         <div className="mb-8">
           <h2 className="font-bold mb-4">Payment Method</h2>
           <div className="grid grid-cols-2 gap-4">
@@ -318,7 +312,6 @@ const CheckOut = () => {
           </div>
         </div>
 
-        {/* Order Summary */}
         <div className="mb-8">
           <h2 className="font-bold mb-4">Order Summary</h2>
           <div className="space-y-3 border-t border-b border-dashed border-gray-200 py-4 text-sm">
@@ -349,7 +342,6 @@ const CheckOut = () => {
           </div>
         </div>
 
-        {/* Dynamic Action Button */}
         <button 
           onClick={handlePlaceOrder}
           disabled={loading}
