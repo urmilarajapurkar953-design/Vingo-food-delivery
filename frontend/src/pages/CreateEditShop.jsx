@@ -78,11 +78,8 @@ const handleSubmit = async (e) => {
             headers: { "Content-Type": "multipart/form-data" }
         });
 
-        // 1. Get the shop object from the response
         const updatedShopBase = result.data.shop || result.data;
 
-        // 2. Critical Fix: Ensure we don't lose items during an edit
-        // We also ensure the object has an _id property so the dashboard recognizes it
         const finalData = {
             ...updatedShopBase,
             _id: updatedShopBase._id || updatedShopBase.id || myShopData?._id,
@@ -91,12 +88,10 @@ const handleSubmit = async (e) => {
                 : (myShopData?.items || [])
         };
 
-        // 3. Update Redux FIRST
         dispatch(setMyShopData(finalData));
         
         toast.success(myShopData ? "Shop updated successfully!" : "Shop created successfully!", { id: toastId });
 
-        // 4. Navigate to the dashboard immediately to see the change
         navigate('/home'); 
 
     } catch (error) {
