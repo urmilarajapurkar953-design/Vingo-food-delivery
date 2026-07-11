@@ -5,7 +5,7 @@ import axios from 'axios';
 import { setMyShopData } from '../redux/ownerSlice';
 import { serverUrl } from '../main';
 import { useParams, useNavigate } from 'react-router-dom';
-import toast from 'react-hot-toast'; // Import toast
+import toast from 'react-hot-toast'; 
 
 const EditItem = () => {
     const dispatch = useDispatch();
@@ -37,7 +37,6 @@ const EditItem = () => {
         }
     };
 
-    // 1. Fetch current item data on load
     useEffect(() => {
         const handleGetItemById = async () => {
             try {
@@ -46,7 +45,7 @@ const EditItem = () => {
                 setCurrentItem(result.data);
             } catch (error) {
                 console.log("Error fetching item by ID:", error);
-                toast.error("Failed to load item details"); // Toast for error
+                toast.error("Failed to load item details"); 
             } finally {
                 setIsLoading(false);
             }
@@ -54,7 +53,6 @@ const EditItem = () => {
         handleGetItemById();
     }, [itemId]);
 
-    // 2. Sync state when currentItem is loaded
     useEffect(() => {
         if (currentItem) {
             setName(currentItem.name || '');
@@ -68,14 +66,12 @@ const EditItem = () => {
     const handleSubmit = async (e) => {
         e.preventDefault();
         
-        // Basic validation toast
         if (!category) {
             return toast.error("Please select a category");
         }
 
         setIsSubmitting(true);
-        const loadingToast = toast.loading("Updating item..."); // Show loading toast
-        
+        const loadingToast = toast.loading("Updating item..."); 
         try {
             const formData = new FormData();
             formData.append("name", name);
@@ -93,12 +89,12 @@ const EditItem = () => {
 
             dispatch(setMyShopData(result.data));
             
-            toast.success("Item Updated Successfully!", { id: loadingToast }); // Update loading toast to success
+            toast.success("Item Updated Successfully!", { id: loadingToast }); 
             navigate('/home'); 
         } catch (error) {
             console.log(error);
             const message = error.response?.data?.message || "Something went wrong";
-            toast.error(message, { id: loadingToast }); // Update loading toast to error
+            toast.error(message, { id: loadingToast }); 
         } finally {
             setIsSubmitting(false);
         }
