@@ -6,7 +6,6 @@ const OrderPlaced = () => {
   const navigate = useNavigate();
   const location = useLocation();
 
-  // 1. Extract the master unified order object returned from your order placement response
   const masterOrder = location.state?.orders?.[0];
   const shopOrdersList = masterOrder?.shopOrders || [];
 
@@ -14,10 +13,8 @@ const OrderPlaced = () => {
     <div className="min-h-screen bg-[#fff9f6] flex items-center justify-center p-4 md:p-8 font-sans">
       <div className="max-w-xl w-full bg-white rounded-[2.5rem] shadow-xl shadow-orange-900/5 border border-orange-100/40 p-6 md:p-10 text-center relative overflow-hidden">
         
-        {/* Top Decorative Line */}
         <div className="absolute top-0 left-0 right-0 h-2 bg-gradient-to-r from-orange-400 via-[#ff4d2d] to-red-500" />
 
-        {/* Success Banner */}
         <div className="flex flex-col items-center mb-8">
           <div className="w-20 h-20 bg-green-50 rounded-full flex items-center justify-center text-green-500 text-5xl mb-4 animate-pulse shadow-inner">
             <FaCheckCircle />
@@ -30,7 +27,6 @@ const OrderPlaced = () => {
           </p>
         </div>
 
-        {/* Dynamic Shop Details & Their Unique Ordered Items */}
         {shopOrdersList.length > 0 && (
           <div className="text-left mb-8 space-y-4">
             <div className="flex items-center justify-between border-b border-gray-100 pb-2 mb-2">
@@ -43,9 +39,7 @@ const OrderPlaced = () => {
             </div>
             
             {shopOrdersList.map((subOrder, idx) => {
-              /* CRITICAL FIX FOR EXACT SHOP NAMES:
-                If this shows 'Shop ID: ...', your backend didn't use .populate('shopOrders.shop')
-              */
+              
               const exactShopName = subOrder.shop?.name || `Shop ID: ...${String(subOrder.shop?._id || subOrder.shop).slice(-6)}`;
               const shopImage = subOrder.shop?.image;
 
@@ -54,7 +48,6 @@ const OrderPlaced = () => {
                   key={subOrder._id || idx} 
                   className="bg-white rounded-2xl border border-gray-100 shadow-sm hover:border-orange-500/20 transition-all duration-300 overflow-hidden"
                 >
-                  {/* Shop Heading Bar */}
                   <div className="p-4 flex gap-4 items-center bg-gradient-to-r from-gray-50/50 to-transparent">
                     {shopImage ? (
                       <img 
@@ -89,15 +82,11 @@ const OrderPlaced = () => {
                     </div>
                   </div>
 
-                  {/* DIFFERENT SHOP ITEMS GROUP BLOCK:
-                    Renders the exact items assigned uniquely to this specific shop loop section
-                  */}
+                 
                   {subOrder.shopOrderItems?.length > 0 && (
                     <div className="px-4 pb-3 pt-2 bg-gray-50/30 border-t border-gray-50/50 space-y-1.5">
                       {subOrder.shopOrderItems.map((orderItem, itemIdx) => {
-                        /* CRITICAL FIX FOR EXACT ITEM NAMES:
-                          If this shows 'Item ID: ...', your backend didn't use .populate('shopOrders.shopOrderItems.item')
-                        */
+                       
                         const exactItemName = orderItem.item?.name || `Item ID: ...${String(orderItem.item?._id || orderItem.item).slice(-6)}`;
                         
                         return (
@@ -118,7 +107,6 @@ const OrderPlaced = () => {
           </div>
         )}
 
-        {/* Total Cost, Location, and Payment Status Breakdown block */}
         {masterOrder && (
           <div className="bg-gray-50/60 rounded-2xl p-4 border border-gray-100 text-left mb-8 text-xs space-y-2.5">
             <h4 className="font-bold text-gray-700 flex items-center gap-1.5 border-b border-gray-200/60 pb-1.5 mb-2">
@@ -148,7 +136,6 @@ const OrderPlaced = () => {
           </div>
         )}
 
-        {/* Lower Navigation Controls */}
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
           <button
             onClick={() => navigate('/home')}
