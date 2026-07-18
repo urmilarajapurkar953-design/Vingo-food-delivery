@@ -2,7 +2,6 @@ import React, { useEffect, useState } from 'react';
 import axios from 'axios';
 import { FaStore, FaUser, FaPhone, FaMapMarkerAlt, FaClock, FaReceipt, FaCircle, FaBell } from 'react-icons/fa';
 
-// Pull Shared Global Hook
 import { useSocket } from '../context/SocketContext';
 
 const OwnerOrderPage = ({ currentOwnerId }) => { 
@@ -13,7 +12,6 @@ const OwnerOrderPage = ({ currentOwnerId }) => {
   const [localStatuses, setLocalStatuses] = useState({});
   const [isSavingMap, setIsSavingMap] = useState({});
 
-  // Fetch shared background context socket instance
   const { socket } = useSocket();
 
   useEffect(() => {
@@ -21,13 +19,11 @@ const OwnerOrderPage = ({ currentOwnerId }) => {
 
     if (!socket) return;
 
-    // Clear any lingering instance handlers to prevent state doubling issues
     socket.off('newOrderReceived');
 
     socket.on('newOrderReceived', (incomingOrder) => {
       console.log("📨 Live Order received inside kitchen context:", incomingOrder);
       
-      // 🔍 Normalize the payment string cleanly from backend to frontend expectations
       const rawPayment = 
         incomingOrder.paymentMethod || 
         incomingOrder.paymentMode || 
@@ -41,7 +37,6 @@ const OwnerOrderPage = ({ currentOwnerId }) => {
         }
       }
 
-      // Format incoming payload properties to match DB initialization schema exactly
       const mappedLiveOrder = {
         ...incomingOrder,
         paymentMethod: cleanPaymentString,
@@ -66,7 +61,6 @@ const OwnerOrderPage = ({ currentOwnerId }) => {
     try {
       const res = await axios.get('http://localhost:8000/api/orders/owner-dashboard', { withCredentials: true });
       if (res.data.success) {
-        // Clean database outputs to use consistent title casing definitions
         const formattedOrders = res.data.orders.map(order => {
           const rawMethod = order.paymentMethod || order.paymentMode || "Online Payment";
           const isCOD = String(rawMethod).toLowerCase().includes('cod') || String(rawMethod).toLowerCase().includes('cash');
